@@ -1,0 +1,504 @@
+@import 'tailwindcss';
+
+:root {
+  --bg0: #1a0610;
+  --bg1: #3a0a22;
+  --magenta: #e0186a;
+  --magenta-deep: #8a0a3a;
+  --gold: #f0c14b;
+  --gold-dim: #b8860b;
+  --panel: rgba(18, 4, 12, 0.88);
+  --text: #ffe8f2;
+  --muted: #c48aa4;
+  --green: #39d98a;
+  --green-deep: #0f8f52;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+  height: 100%;
+}
+
+body {
+  font-family: Orbitron, system-ui, sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(ellipse at 50% 0%, #6a1438 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 100%, #4a0a28 0%, transparent 45%),
+    linear-gradient(180deg, #2a0818 0%, var(--bg0) 55%, #0c0308 100%);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+.gold {
+  color: var(--gold);
+}
+
+.app-shell {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 14px 18px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.app-shell.is-flash {
+  animation: hitFlash 180ms ease-out;
+}
+
+@keyframes hitFlash {
+  0% {
+    filter: brightness(1.35) saturate(1.4);
+  }
+  100% {
+    filter: none;
+  }
+}
+
+.top-bar {
+  text-align: center;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-mark {
+  color: var(--gold);
+  text-shadow: 0 0 12px rgba(240, 193, 75, 0.7);
+  font-size: 22px;
+}
+
+.brand h1 {
+  margin: 0;
+  font-family: Cinzel, serif;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  font-size: clamp(22px, 4vw, 36px);
+  color: var(--gold);
+  text-shadow:
+    0 0 18px rgba(224, 24, 106, 0.55),
+    2px 2px 0 #4a0818;
+}
+
+.tagline {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.06em;
+}
+
+.stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 160px;
+  gap: 12px;
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
+}
+
+.arena {
+  min-width: 0;
+}
+
+.arena-frame {
+  position: relative;
+  border: 3px solid var(--gold);
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(90, 10, 40, 0.65) 0%, rgba(20, 4, 12, 0.92) 100%);
+  box-shadow:
+    0 0 0 2px #4a0818,
+    0 0 28px rgba(224, 24, 106, 0.35),
+    inset 0 0 40px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+  min-height: 360px;
+}
+
+.mage-canvas-wrap {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.mage-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.grid-panel {
+  position: relative;
+  z-index: 1;
+  padding: 18px 18px 18px clamp(120px, 22vw, 200px);
+  min-height: 360px;
+  display: flex;
+  align-items: center;
+}
+
+.keno-grid {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  aspect-ratio: 8 / 5;
+}
+
+.keno-ball {
+  appearance: none;
+  border: 2px solid rgba(255, 200, 230, 0.25);
+  border-radius: 999px;
+  aspect-ratio: 1;
+  font-family: inherit;
+  font-size: clamp(10px, 1.8vw, 14px);
+  font-weight: 700;
+  color: #fff;
+  cursor: pointer;
+  background: radial-gradient(circle at 35% 30%, #5a2040, #1a0810 70%);
+  box-shadow:
+    inset 0 2px 4px rgba(255, 255, 255, 0.12),
+    0 2px 0 #0a0206;
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.keno-ball:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(240, 193, 75, 0.7);
+}
+
+.keno-ball:disabled {
+  cursor: default;
+}
+
+.ball-idle {
+  /* default */
+}
+
+.ball-selected {
+  background: radial-gradient(circle at 35% 30%, #ffe08a, #c48a10 55%, #6a4508 100%);
+  color: #1a1000;
+  border-color: #ffe566;
+  box-shadow:
+    0 0 14px rgba(240, 193, 75, 0.65),
+    inset 0 2px 4px rgba(255, 255, 255, 0.35);
+}
+
+.ball-miss {
+  background: radial-gradient(circle at 35% 30%, #3a3a42, #121218 75%);
+  color: #9a9aa8;
+  border-color: #3a3a48;
+  box-shadow: none;
+}
+
+.ball-hit {
+  background: radial-gradient(circle at 35% 30%, #fff1a8, #ff7a18 45%, #c01840 100%);
+  color: #1a0800;
+  border-color: #39ffb0;
+  box-shadow:
+    0 0 0 2px rgba(57, 255, 176, 0.85),
+    0 0 22px rgba(255, 120, 40, 0.9),
+    inset 0 2px 6px rgba(255, 255, 255, 0.4);
+  animation: hitPulse 0.45s ease-out;
+}
+
+@keyframes hitPulse {
+  0% {
+    transform: scale(1.18);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.payout-panel {
+  border: 2px solid rgba(240, 193, 75, 0.55);
+  border-radius: 12px;
+  background: var(--panel);
+  padding: 12px 10px;
+  box-shadow: inset 0 0 20px rgba(224, 24, 106, 0.15);
+}
+
+.payout-title {
+  margin: 0;
+  font-family: Cinzel, serif;
+  font-size: 14px;
+  color: var(--gold);
+  letter-spacing: 0.08em;
+  text-align: center;
+}
+
+.payout-sub {
+  margin: 4px 0 10px;
+  font-size: 9px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.payout-table {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.payout-head,
+.payout-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+
+.payout-head {
+  color: var(--muted);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.payout-row {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.payout-row span:last-child {
+  text-align: right;
+}
+
+.bet-bar {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  gap: 12px;
+  align-items: end;
+  padding: 12px;
+  border: 2px solid rgba(240, 193, 75, 0.45);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.bet-meta {
+  display: flex;
+  gap: 8px;
+}
+
+.meta-pill {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  min-width: 88px;
+}
+
+.meta-label {
+  font-size: 9px;
+  color: var(--muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.meta-value {
+  font-size: 14px;
+}
+
+.bet-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-secondary,
+.btn-step,
+.btn-bet {
+  appearance: none;
+  font-family: inherit;
+  cursor: pointer;
+  border-radius: 8px;
+  border: 2px solid #000;
+}
+
+.btn-secondary {
+  padding: 10px 14px;
+  background: linear-gradient(180deg, #5a2040, #2a0c1c);
+  color: var(--text);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  filter: brightness(1.12);
+}
+
+.btn-secondary:disabled,
+.btn-step:disabled,
+.btn-bet:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.bet-amount {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bet-stepper {
+  display: grid;
+  grid-template-columns: 40px 1fr 40px;
+  gap: 6px;
+  align-items: center;
+}
+
+.bet-stepper input {
+  width: 100%;
+  min-width: 0;
+  font-family: inherit;
+  font-size: 16px;
+  text-align: center;
+  padding: 10px 6px;
+  border-radius: 8px;
+  border: 2px solid #000;
+  background: #0a0408;
+  color: var(--text);
+}
+
+.btn-step {
+  height: 42px;
+  background: linear-gradient(180deg, #4a1830, #220812);
+  color: var(--gold);
+  font-size: 18px;
+}
+
+.btn-bet {
+  min-width: 120px;
+  min-height: 52px;
+  padding: 12px 22px;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: #041a0c;
+  background: linear-gradient(180deg, #7dffb0 0%, var(--green) 45%, var(--green-deep) 100%);
+  box-shadow:
+    0 4px 0 #065c34,
+    0 0 16px rgba(57, 217, 138, 0.45);
+}
+
+.btn-bet:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.result-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.72);
+  padding: 16px;
+}
+
+.result-card {
+  width: min(100%, 360px);
+  text-align: center;
+  padding: 24px 20px;
+  border-radius: 14px;
+  border: 3px solid var(--gold);
+  background: linear-gradient(180deg, #3a1028, #14040c);
+  box-shadow: 0 0 30px rgba(224, 24, 106, 0.4);
+}
+
+.result-card h2 {
+  margin: 0 0 8px;
+  font-family: Cinzel, serif;
+  color: var(--gold);
+  letter-spacing: 0.08em;
+}
+
+.result-card p {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.result-win {
+  font-size: 22px !important;
+  color: var(--green) !important;
+  margin-bottom: 16px !important;
+}
+
+@media (max-width: 860px) {
+  .stage {
+    grid-template-columns: 1fr;
+  }
+
+  .payout-panel {
+    order: 2;
+  }
+
+  .payout-table {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 4px;
+  }
+
+  .payout-head {
+    display: none;
+  }
+
+  .grid-panel {
+    padding: 14px 12px 14px clamp(96px, 28vw, 150px);
+    min-height: 280px;
+  }
+
+  .bet-bar {
+    grid-template-columns: 1fr 1fr;
+    align-items: stretch;
+  }
+
+  .bet-meta {
+    grid-column: 1 / -1;
+  }
+
+  .btn-bet {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 520px) {
+  .keno-grid {
+    gap: 5px;
+  }
+
+  .keno-ball {
+    font-size: 10px;
+    border-width: 1.5px;
+  }
+
+  .bet-actions {
+    grid-column: 1 / -1;
+  }
+}
