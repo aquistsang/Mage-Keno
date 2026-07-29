@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
 import { easeOutCubic, lerp } from '../utils/easing';
+import { drawChromaKeyedFrame } from '../utils/chromaKey';
 import {
   drawParticles,
   spawnExplosion,
@@ -29,8 +30,12 @@ type Fireball = {
   done: boolean;
 };
 
-/** Swap `public/assets/mage.png` to change the mage sprite. */
-const MAGE_SRC = './assets/mage.png';
+/** Pre-keyed WebM (green screen → alpha). Preferred. */
+const MAGE_WEBM_SRC = './assets/mage.webm';
+/** Raw green-screen MP4 — runtime chroma key if WebM fails. */
+const MAGE_MP4_SRC = './assets/mage.mp4';
+/** Fallback still if video fails to load. */
+const MAGE_IMG_SRC = './assets/mage.png';
 
 export function MageCanvas({
   gridRef,
@@ -41,7 +46,11 @@ export function MageCanvas({
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const mageVideoRef = useRef<HTMLVideoElement | null>(null);
   const mageImgRef = useRef<HTMLImageElement | null>(null);
+  const chromaOffscreenRef = useRef<HTMLCanvasElement | null>(null);
+  const lastMageFrameRef = useRef<HTMLCanvasElement | null>(null);
+  const videoSeekingRef = useRef(false);
   const particlesRef = useRef<Particle[]>([]);
   const fireballRef = useRef<Fireball | null>(null);
   const queueRef = useRef<number[]>([]);
@@ -61,14 +70,99 @@ export function MageCanvas({
   }, [onFireballImpact, onSequenceComplete]);
 
   useEffect(() => {
+    chromaOffscreenRef.current = document.createElement('canvas');
+    lastMageFrameRef.current = document.createElement('canvas');
+
+    const video = document.createElement('video');
+    video.src = `${MAGE_MP4_SRC}?v=loop2`;
+    video.muted = true;
+    // Manual seamless loop — HTML loop=true often flashes a blank/keyframe frame
+    video.loop = false;
+    video.playsInline = true;
+    video.preload = 'auto';
+    video.setAttribute('playsinline', '');
+    video.setAttribute('webkit-playsinline', '');
+
+    // Wrap within ~1 frame of the end → start (avoids cutting visible motion)
+    const LOOP_IN = 0.001;
+    const LOOP_OUT_PAD = 1 / 24;
+
+    const tryPlay = () => {
+      video.play().catch(() => {});
+    };
+
+    const wrapLoop = () => {
+      if (!Number.isFinite(video.duration) || video.duration <= LOOP_OUT_PAD * 2) return;
+      if (video.seeking) return;
+      if (video.currentTime >= video.duration - LOOP_OUT_PAD) {
+        videoSeekingRef.current = true;
+        try {
+          video.currentTime = LOOP_IN;
+        } catch {
+          /* ignore seek race */
+        }
+      }
+    };
+
+    // High-frequency loop check (timeupdate alone is too coarse and causes a visible skip)
+    let loopRaf = 0;
+    const loopTick = () => {
+      wrapLoop();
+      loopRaf = requestAnimationFrame(loopTick);
+    };
+
+    video.addEventListener('loadeddata', () => {
+      mageVideoRef.current = video;
+      tryPlay();
+      cancelAnimationFrame(loopRaf);
+      loopRaf = requestAnimationFrame(loopTick);
+    });
+    video.addEventListener('ended', () => {
+      videoSeekingRef.current = true;
+      video.currentTime = LOOP_IN;
+      tryPlay();
+    });
+    video.addEventListener('seeking', () => {
+      videoSeekingRef.current = true;
+    });
+    video.addEventListener('seeked', () => {
+      // Keep holding last frame for one more paint, then resume live video
+      requestAnimationFrame(() => {
+        videoSeekingRef.current = false;
+        tryPlay();
+      });
+    });
+    video.addEventListener('error', () => {
+      if (video.src.includes('mage.mp4')) {
+        video.src = MAGE_WEBM_SRC;
+        video.load();
+        return;
+      }
+      console.warn('[Mage Keno] mage video failed — falling back to mage.png');
+      mageVideoRef.current = null;
+    });
+    video.load();
+
     const img = new Image();
-    img.src = MAGE_SRC;
+    img.src = MAGE_IMG_SRC;
     img.onload = () => {
       mageImgRef.current = img;
     };
-    img.onerror = () => {
-      console.warn('[Mage Keno] Replace public/assets/mage.png with your mage sprite.');
-      mageImgRef.current = null;
+
+    const unlock = () => {
+      tryPlay();
+    };
+    window.addEventListener('pointerdown', unlock, { once: true });
+    window.addEventListener('keydown', unlock, { once: true });
+
+    return () => {
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('keydown', unlock);
+      cancelAnimationFrame(loopRaf);
+      video.pause();
+      video.removeAttribute('src');
+      video.load();
+      mageVideoRef.current = null;
     };
   }, []);
 
@@ -88,10 +182,24 @@ export function MageCanvas({
     };
   };
 
+  const getGridBottom = (): number => {
+    const canvas = canvasRef.current;
+    const grid = gridRef.current;
+    if (!canvas) return 0;
+    if (!grid) return canvas.height * 0.92;
+    const cRect = canvas.getBoundingClientRect();
+    const gRect = grid.getBoundingClientRect();
+    if (cRect.height <= 0) return canvas.height * 0.92;
+    const scaleY = canvas.height / cRect.height;
+    return (gRect.bottom - cRect.top) * scaleY;
+  };
+
   const getMageStaffPoint = (): { x: number; y: number } => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 80, y: 200 };
-    return { x: canvas.width * 0.14, y: canvas.height * 0.42 };
+    // Staff sits in upper-mid of the mage after feet are pinned to grid bottom
+    const bottom = getGridBottom();
+    return { x: canvas.width * 0.2, y: Math.max(canvas.height * 0.22, bottom - canvas.height * 0.42) };
   };
 
   useEffect(() => {
@@ -158,24 +266,89 @@ export function MageCanvas({
       };
     };
 
-    const tick = (now: number) => {
-      const dt = Math.min(48, now - last);
-      last = now;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        raf = requestAnimationFrame(tick);
-        return;
+    const drawMage = (ctx: CanvasRenderingContext2D) => {
+      const video = mageVideoRef.current;
+      const img = mageImgRef.current;
+      const off = chromaOffscreenRef.current;
+      const lastFrame = lastMageFrameRef.current;
+
+      const seeking =
+        videoSeekingRef.current || (video != null && video.seeking);
+      const canUseVideo =
+        !!video &&
+        !seeking &&
+        video.readyState >= 2 &&
+        video.videoWidth > 0 &&
+        Number.isFinite(video.currentTime);
+
+      let srcW = 0;
+      let srcH = 0;
+      let source: CanvasImageSource | null = null;
+      let keyLive = false;
+
+      if (canUseVideo && video) {
+        source = video;
+        srcW = video.videoWidth;
+        srcH = video.videoHeight;
+        keyLive = true;
+        if (video.paused) video.play().catch(() => {});
+      } else if (lastFrame && lastFrame.width > 0) {
+        source = lastFrame;
+        srcW = lastFrame.width;
+        srcH = lastFrame.height;
+      } else if (img && img.complete && img.naturalWidth > 0) {
+        source = img;
+        srcW = img.naturalWidth;
+        srcH = img.naturalHeight;
       }
 
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const boxW = canvas.width * 0.34;
+      const boxH = canvas.height * 0.92;
+      const scale =
+        (srcW > 0 && srcH > 0 ? Math.min(boxW / srcW, boxH / srcH) : 1) * 0.9;
+      const mageW = srcW > 0 ? srcW * scale : boxW * 0.9;
+      const mageH = srcH > 0 ? srcH * scale : boxH * 0.9;
+      const mageX = canvas.width * 0.055;
+      // Pin feet to the bottom of the last keno row
+      const gridBottom = getGridBottom();
+      const mageY = Math.max(8, (gridBottom || canvas.height * 0.92) - mageH);
 
-      const mage = mageImgRef.current;
-      const mageW = canvas.width * 0.22;
-      const mageH = mageW * 1.35;
-      const mageX = canvas.width * 0.01;
-      const mageY = canvas.height * 0.55 - mageH / 2;
-      if (mage) {
-        ctx.drawImage(mage, mageX, mageY, mageW, mageH);
+      if (source && off && srcW > 0 && keyLive) {
+        drawChromaKeyedFrame(
+          ctx,
+          source,
+          0,
+          0,
+          srcW,
+          srcH,
+          mageX,
+          mageY,
+          mageW,
+          mageH,
+          off,
+          {
+            keyR: 25,
+            keyG: 225,
+            keyB: 13,
+            similarity: 0.48,
+            blend: 0.04,
+            despill: 0.88,
+            maxKeyWidth: 560,
+          },
+        );
+        if (lastFrame && off.width > 0) {
+          if (lastFrame.width !== off.width || lastFrame.height !== off.height) {
+            lastFrame.width = off.width;
+            lastFrame.height = off.height;
+          }
+          const lctx = lastFrame.getContext('2d');
+          if (lctx) {
+            lctx.clearRect(0, 0, lastFrame.width, lastFrame.height);
+            lctx.drawImage(off, 0, 0);
+          }
+        }
+      } else if (source) {
+        ctx.drawImage(source, mageX, mageY, mageW, mageH);
       } else {
         ctx.fillStyle = 'rgba(120, 80, 200, 0.55)';
         ctx.beginPath();
@@ -193,6 +366,19 @@ export function MageCanvas({
         ctx.font = `bold ${Math.floor(canvas.width * 0.018)}px Orbitron, sans-serif`;
         ctx.fillText('MAGE', mageX + mageW * 0.22, mageY + mageH * 0.95);
       }
+    };
+
+    const tick = (now: number) => {
+      const dt = Math.min(48, now - last);
+      last = now;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        raf = requestAnimationFrame(tick);
+        return;
+      }
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawMage(ctx);
 
       if (flashRef.current > 0) {
         flashRef.current = Math.max(0, flashRef.current - dt);

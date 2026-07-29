@@ -7,17 +7,15 @@ export function PayoutTable() {
 
   return (
     <aside className="payout-panel" aria-label="Payout table">
-      <h2 className="payout-title">Payouts</h2>
-      <p className="payout-sub">Matches × bet</p>
+      <div className="payout-label">
+        <h2 className="payout-title">Payouts</h2>
+        <span className="payout-sub">Hits × bet</span>
+      </div>
       <div className="payout-table">
-        <div className="payout-head">
-          <span>Hit</span>
-          <span>Mult</span>
-        </div>
         {rows.map((r) => (
           <div key={r.matches} className="payout-row">
-            <span>{r.matches}</span>
-            <span className="gold">{r.mult.toFixed(1)}x</span>
+            <span className="payout-hit">{r.matches}</span>
+            <span className="gold payout-mult">{r.mult.toFixed(1)}x</span>
           </div>
         ))}
       </div>

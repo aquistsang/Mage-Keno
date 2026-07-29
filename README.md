@@ -21,6 +21,9 @@ npm run build
 
 Open `dist/index.html` or TriBet lobby → **Mage Keno**.
 
-## Mage sprite
+## Mage character
 
-Replace `public/assets/mage.png` with your own art, then rebuild. Transparent PNG recommended.
+Primary: looping `public/assets/mage.mp4` (white background is chroma-keyed in canvas).
+Fallback still: `public/assets/mage.png`.
+
+Replace either asset and rebuild.

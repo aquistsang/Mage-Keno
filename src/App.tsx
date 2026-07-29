@@ -39,9 +39,8 @@ export default function App() {
               />
             </div>
           </div>
+          <PayoutTable />
         </section>
-
-        <PayoutTable />
       </main>
 
       <BetControls
