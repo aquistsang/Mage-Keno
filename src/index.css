@@ -175,6 +175,7 @@ body {
   max-width: 720px;
   margin-left: auto;
   aspect-ratio: 8 / 5;
+  position: relative;
 }
 
 .keno-ball {
@@ -240,14 +241,32 @@ body {
   overflow: hidden;
 }
 
+.keno-goblin-shared {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
 .keno-pick-mark {
-  width: 78%;
-  height: 78%;
+  width: 88%;
+  height: 88%;
   object-fit: contain;
   object-position: center center;
   pointer-events: none;
   user-select: none;
+  background: transparent;
+  border: 0;
   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35));
+}
+
+.keno-pick-mark.is-hit-mark {
+  filter:
+    drop-shadow(0 0 6px rgba(255, 120, 40, 0.85))
+    saturate(1.25)
+    brightness(1.08);
 }
 
 .keno-ball:hover:not(:disabled) .keno-ball-front {
