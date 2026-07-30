@@ -52,6 +52,7 @@ body {
 
 .app-shell {
   min-height: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -158,7 +159,8 @@ body {
 .grid-panel {
   position: relative;
   z-index: 1;
-  padding: 14px 18px 10px clamp(180px, 34vw, 320px);
+  /* Reserve left column for mage — keeps numbers clear of character */
+  padding: 14px 16px 10px clamp(240px, 42vw, 400px);
   min-height: 0;
   display: flex;
   align-items: flex-start;
@@ -167,9 +169,10 @@ body {
 
 .keno-grid {
   display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
   gap: 6px;
-  width: 92%;
-  max-width: 760px;
+  width: 100%;
+  max-width: 720px;
   margin-left: auto;
   aspect-ratio: 8 / 5;
 }
@@ -335,11 +338,18 @@ body {
 
 .payout-table {
   display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  flex: 1;
+  min-width: 0;
+}
+
+.payout-table-line {
+  display: flex;
   flex-direction: row;
   flex-wrap: nowrap;
   gap: 6px;
-  font-size: 11px;
-  flex: 1;
   min-width: 0;
 }
 
@@ -369,9 +379,10 @@ body {
 }
 
 .bet-bar {
-  display: grid;
-  grid-template-columns: auto auto 1fr auto;
-  gap: 12px;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 10px 12px;
   align-items: end;
   padding: 10px 12px;
   border: 2px solid rgba(240, 193, 75, 0.45);
@@ -382,9 +393,19 @@ body {
   flex: 0 0 auto;
 }
 
-.bet-meta {
+.bet-row-stats {
   display: flex;
   gap: 8px;
+  align-items: stretch;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.bet-row-actions {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  flex: 0 0 auto;
 }
 
 .meta-pill {
@@ -395,7 +416,7 @@ body {
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.35);
   border: 1px solid rgba(255, 255, 255, 0.06);
-  min-width: 88px;
+  min-width: 72px;
 }
 
 .meta-label {
@@ -407,11 +428,6 @@ body {
 
 .meta-value {
   font-size: 14px;
-}
-
-.bet-actions {
-  display: flex;
-  gap: 8px;
 }
 
 .btn-secondary,
@@ -447,6 +463,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  flex: 1 1 auto;
+  min-width: 120px;
 }
 
 .bet-stepper {
@@ -534,50 +552,224 @@ body {
 }
 
 @media (max-width: 860px) {
-  .payout-panel {
-    padding: 8px;
-    gap: 8px;
+  /* Fit whole UI in one viewport — no scroll; maximize play area */
+  .app-shell {
+    height: 100dvh;
+    max-height: 100dvh;
+    min-height: 100dvh;
+    overflow: hidden;
+    padding: 2px 3px 3px;
+    gap: 0;
   }
 
-  .payout-row {
-    min-width: 38px;
-    padding: 5px 4px;
+  .top-bar {
+    margin-bottom: 0;
+    line-height: 1;
   }
 
-  .payout-mult {
-    font-size: 11px;
+  .brand {
+    gap: 6px;
   }
 
-  .grid-panel {
-    padding: 12px 12px 8px clamp(120px, 32vw, 200px);
+  .brand-mark {
+    font-size: 12px;
+  }
+
+  .brand h1 {
+    font-size: clamp(13px, 3.6vw, 17px);
+  }
+
+  .tagline {
+    display: none;
+  }
+
+  .stage {
+    flex: 1 1 auto;
     min-height: 0;
   }
 
-  .bet-bar {
-    grid-template-columns: 1fr 1fr;
-    align-items: stretch;
+  .arena {
+    flex: 1 1 auto;
+    min-height: 0;
   }
 
-  .bet-meta {
-    grid-column: 1 / -1;
+  /* Numbers pinned to bottom; mage fills everything above them */
+  .arena-frame {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    border-width: 2px;
+    border-radius: 10px 10px 0 0;
+  }
+
+  .payout-panel {
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    padding: 4px 6px;
+    gap: 6px;
+    overflow-x: visible;
+    border-width: 1px;
+  }
+
+  .payout-label {
+    font-size: 8px;
+    white-space: nowrap;
+    min-width: 0;
+    justify-content: center;
+  }
+
+  .payout-title {
+    font-size: 11px;
+  }
+
+  .payout-sub {
+    display: none;
+  }
+
+  .payout-table {
+    gap: 3px;
+  }
+
+  .payout-table-line {
+    gap: 4px;
+  }
+
+  .payout-row {
+    min-width: 0;
+    flex: 1 1 0;
+    padding: 3px 2px;
+    border-radius: 5px;
+  }
+
+  .payout-hit {
+    font-size: 8px;
+  }
+
+  .payout-mult {
+    font-size: 10px;
+  }
+
+  .mage-canvas-wrap {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+  }
+
+  .grid-panel {
+    position: relative;
+    z-index: 1;
+    flex: 0 0 auto;
+    width: 100%;
+    min-height: 0;
+    padding: 0 6px 6px;
+    justify-content: center;
+    align-items: flex-end;
+  }
+
+  /* True circles: width-driven 8×5 board (frees vertical room for mage) */
+  .keno-grid {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+    aspect-ratio: 8 / 5;
+    width: 100%;
+    height: auto;
+    max-width: 100%;
+    max-height: 100%;
+    margin: 0 auto;
+    gap: 4px;
+  }
+
+  .keno-ball {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1;
+    align-self: center;
+    justify-self: center;
+  }
+
+  .keno-ball-face {
+    font-size: clamp(12px, 3.6vw, 16px);
+  }
+
+  /* Balance · Picks · Bet USD on one row; actions below */
+  .bet-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    padding: 4px 6px;
+  }
+
+  .bet-row-stats {
+    width: 100%;
+    gap: 4px;
+  }
+
+  .meta-pill {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 4px 5px;
+    gap: 1px;
+  }
+
+  .meta-label {
+    font-size: 8px;
+  }
+
+  .meta-value {
+    font-size: 11px;
+  }
+
+  .bet-amount {
+    flex: 1.4 1 0;
+    min-width: 0;
+    gap: 1px;
+  }
+
+  .bet-stepper {
+    grid-template-columns: 30px 1fr 30px;
+    gap: 3px;
+  }
+
+  .bet-stepper input {
+    font-size: 13px;
+    padding: 5px 3px;
+  }
+
+  .btn-step {
+    height: 30px;
+    font-size: 15px;
+  }
+
+  .bet-row-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1.35fr;
+    gap: 4px;
+  }
+
+  .btn-secondary {
+    padding: 7px 4px;
+    font-size: 10px;
   }
 
   .btn-bet {
-    grid-column: 1 / -1;
+    min-width: 0;
+    min-height: 36px;
+    width: 100%;
+    padding: 7px 8px;
+    font-size: 13px;
   }
 }
 
 @media (max-width: 520px) {
   .keno-grid {
-    gap: 4px;
-    width: 90%;
+    gap: 3px;
   }
 
   .keno-ball-face {
-    font-size: clamp(11px, 3.2vw, 15px);
-  }
-
-  .bet-actions {
-    grid-column: 1 / -1;
+    font-size: clamp(11px, 3.8vw, 15px);
   }
 }

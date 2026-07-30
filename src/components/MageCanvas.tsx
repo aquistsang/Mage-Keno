@@ -192,6 +192,18 @@ export function MageCanvas({
     };
   };
 
+  const getGridTop = (): number => {
+    const canvas = canvasRef.current;
+    const grid = gridRef.current;
+    if (!canvas) return 0;
+    if (!grid) return canvas.height * 0.55;
+    const cRect = canvas.getBoundingClientRect();
+    const gRect = grid.getBoundingClientRect();
+    if (cRect.height <= 0) return canvas.height * 0.55;
+    const scaleY = canvas.height / cRect.height;
+    return Math.max(0, (gRect.top - cRect.top) * scaleY);
+  };
+
   const getGridBottom = (): number => {
     const canvas = canvasRef.current;
     const grid = gridRef.current;
@@ -379,15 +391,39 @@ export function MageCanvas({
         srcH = img.naturalHeight;
       }
 
-      const boxW = canvas.width * 0.34;
-      const boxH = canvas.height * 0.92;
-      const scale =
-        (srcW > 0 && srcH > 0 ? Math.min(boxW / srcW, boxH / srcH) : 1) * 0.9;
-      const mageW = srcW > 0 ? srcW * scale : boxW * 0.9;
-      const mageH = srcH > 0 ? srcH * scale : boxH * 0.9;
-      const mageX = canvas.width * 0.055;
-      const gridBottom = getGridBottom();
-      const mageY = Math.max(8, (gridBottom || canvas.height * 0.92) - mageH);
+      const wrapEl = wrapRef.current;
+      const wrapW = wrapEl?.clientWidth ?? canvas.width;
+      const portrait = wrapW < 860;
+
+      let mageW: number;
+      let mageH: number;
+      let mageX: number;
+      let mageY: number;
+
+      if (portrait) {
+        // Fill all space above the number grid — no dead gap
+        const gridTop = getGridTop();
+        const bandH = Math.max(gridTop - 6, canvas.height * 0.45);
+        const boxW = canvas.width * 0.99;
+        const boxH = bandH * 0.99;
+        const scale =
+          srcW > 0 && srcH > 0 ? Math.min(boxW / srcW, boxH / srcH) : 1;
+        mageW = srcW > 0 ? srcW * scale : boxW;
+        mageH = srcH > 0 ? srcH * scale : boxH;
+        mageX = (canvas.width - mageW) / 2;
+        mageY = Math.max(0, bandH - mageH);
+      } else {
+        // Desktop: large mage on the left edge of the frame
+        const boxW = canvas.width * 0.42;
+        const boxH = canvas.height * 0.98;
+        const scale =
+          srcW > 0 && srcH > 0 ? Math.min(boxW / srcW, boxH / srcH) : 1;
+        mageW = srcW > 0 ? srcW * scale : boxW;
+        mageH = srcH > 0 ? srcH * scale : boxH;
+        mageX = canvas.width * 0.012;
+        const gridBottom = getGridBottom();
+        mageY = Math.max(4, (gridBottom || canvas.height * 0.98) - mageH);
+      }
 
       // Cast clip is brighter green; idle uses similar key
       const key = castingRef.current

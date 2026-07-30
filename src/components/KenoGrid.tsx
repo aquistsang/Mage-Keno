@@ -1,5 +1,5 @@
 import type { RefObject } from 'react';
-import { COLS, GRID_SIZE, ROWS } from '../utils/payouts';
+import { GRID_SIZE } from '../utils/payouts';
 import type { BallVisualState } from '../hooks/useKenoGame';
 
 type Props = {
@@ -24,14 +24,7 @@ export function KenoGrid({ selected, ballState, disabled, onToggle, gridRef }: P
   const numbers = Array.from({ length: GRID_SIZE }, (_, i) => i + 1);
 
   return (
-    <div
-      ref={gridRef}
-      className="keno-grid"
-      style={{
-        gridTemplateColumns: `repeat(${COLS}, minmax(0, 1fr))`,
-        gridTemplateRows: `repeat(${ROWS}, minmax(0, 1fr))`,
-      }}
-    >
+    <div ref={gridRef} className="keno-grid">
       {numbers.map((n) => {
         const visual = ballState.get(n) ?? (selected.has(n) ? 'selected' : 'idle');
         const flipped = visual === 'selected' || visual === 'hit';
