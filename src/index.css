@@ -176,29 +176,83 @@ body {
 
 .keno-ball {
   appearance: none;
+  position: relative;
   border: 1.5px solid rgba(255, 200, 230, 0.25);
   border-radius: 999px;
   aspect-ratio: 1;
+  padding: 0;
+  cursor: pointer;
+  background: transparent;
+  box-shadow: none;
+  perspective: 420px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.keno-ball-inner {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  transform-style: preserve-3d;
+  transition: transform 0.45s cubic-bezier(0.4, 0.2, 0.2, 1);
+}
+
+.keno-ball.is-flipped .keno-ball-inner {
+  transform: rotateY(180deg);
+}
+
+.keno-ball-face {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
   font-family: Nunito, "Segoe UI", sans-serif;
   font-size: clamp(13px, 2.4vw, 20px);
   font-weight: 800;
   letter-spacing: -0.02em;
   line-height: 1;
-  color: #fff;
-  cursor: pointer;
-  background: radial-gradient(circle at 35% 30%, #5a2040, #1a0810 70%);
+  border: 1.5px solid rgba(255, 200, 230, 0.25);
   box-shadow:
     inset 0 2px 4px rgba(255, 255, 255, 0.12),
     0 2px 0 #0a0206;
-  transition:
-    transform 0.12s ease,
-    box-shadow 0.12s ease,
-    border-color 0.12s ease;
 }
 
-.keno-ball:hover:not(:disabled) {
-  transform: translateY(-1px);
+.keno-ball-front {
+  color: #fff;
+  background: radial-gradient(circle at 35% 30%, #5a2040, #1a0810 70%);
+}
+
+.keno-ball-back {
+  transform: rotateY(180deg);
+  color: #1a1000;
+  background: radial-gradient(circle at 35% 30%, #ffe08a, #c48a10 55%, #6a4508 100%);
+  border-color: #ffe566;
+  box-shadow:
+    0 0 14px rgba(240, 193, 75, 0.65),
+    inset 0 2px 4px rgba(255, 255, 255, 0.35);
+  overflow: hidden;
+}
+
+.keno-pick-mark {
+  width: 78%;
+  height: 78%;
+  object-fit: contain;
+  object-position: center center;
+  pointer-events: none;
+  user-select: none;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35));
+}
+
+.keno-ball:hover:not(:disabled) .keno-ball-front {
   border-color: rgba(240, 193, 75, 0.7);
+}
+
+.keno-ball:hover:not(:disabled):not(.is-flipped) {
+  transform: translateY(-1px);
 }
 
 .keno-ball:disabled {
@@ -209,25 +263,20 @@ body {
   /* default */
 }
 
-.ball-selected {
+.ball-selected .keno-ball-back {
   background: radial-gradient(circle at 35% 30%, #ffe08a, #c48a10 55%, #6a4508 100%);
-  color: #1a1000;
   border-color: #ffe566;
-  box-shadow:
-    0 0 14px rgba(240, 193, 75, 0.65),
-    inset 0 2px 4px rgba(255, 255, 255, 0.35);
 }
 
-.ball-miss {
+.ball-miss .keno-ball-front {
   background: radial-gradient(circle at 35% 30%, #3a3a42, #121218 75%);
   color: #9a9aa8;
   border-color: #3a3a48;
   box-shadow: none;
 }
 
-.ball-hit {
+.ball-hit .keno-ball-back {
   background: radial-gradient(circle at 35% 30%, #fff1a8, #ff7a18 45%, #c01840 100%);
-  color: #1a0800;
   border-color: #39ffb0;
   box-shadow:
     0 0 0 2px rgba(57, 255, 176, 0.85),
@@ -238,10 +287,10 @@ body {
 
 @keyframes hitPulse {
   0% {
-    transform: scale(1.18);
+    transform: rotateY(180deg) scale(1.14);
   }
   100% {
-    transform: scale(1);
+    transform: rotateY(180deg) scale(1);
   }
 }
 
@@ -524,7 +573,7 @@ body {
     width: 90%;
   }
 
-  .keno-ball {
+  .keno-ball-face {
     font-size: clamp(11px, 3.2vw, 15px);
   }
 

@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
-import { easeOutCubic, lerp } from '../utils/easing';
 import { drawChromaKeyedFrame } from '../utils/chromaKey';
 import {
   drawParticles,
@@ -17,25 +16,16 @@ type Props = {
   onSequenceComplete: () => void;
 };
 
-type Fireball = {
-  x: number;
-  y: number;
-  fromX: number;
-  fromY: number;
-  toX: number;
-  toY: number;
-  t: number;
-  duration: number;
-  number: number;
-  done: boolean;
-};
-
-/** Pre-keyed WebM (green screen → alpha). Preferred. */
-const MAGE_WEBM_SRC = './assets/mage.webm';
-/** Raw green-screen MP4 — runtime chroma key if WebM fails. */
-const MAGE_MP4_SRC = './assets/mage.mp4';
+/** Idle looping mage */
+const MAGE_IDLE_SRC = './assets/mage.mp4';
+/** Cast animation played on BET */
+const MAGE_CAST_SRC = './assets/mage-cast.mp4';
 /** Fallback still if video fails to load. */
 const MAGE_IMG_SRC = './assets/mage.png';
+/** Whoosh SFX per revealed number */
+const FIREBALL_WHOOSH_SRC = './assets/fireball-whoosh.mp3';
+
+const REVEAL_INTERVAL_MS = 280;
 
 export function MageCanvas({
   gridRef,
@@ -46,13 +36,17 @@ export function MageCanvas({
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
-  const mageVideoRef = useRef<HTMLVideoElement | null>(null);
+  const idleVideoRef = useRef<HTMLVideoElement | null>(null);
+  const castVideoRef = useRef<HTMLVideoElement | null>(null);
+  const activeVideoRef = useRef<HTMLVideoElement | null>(null);
   const mageImgRef = useRef<HTMLImageElement | null>(null);
   const chromaOffscreenRef = useRef<HTMLCanvasElement | null>(null);
   const lastMageFrameRef = useRef<HTMLCanvasElement | null>(null);
   const videoSeekingRef = useRef(false);
+  const castingRef = useRef(false);
+  const castDoneRef = useRef(true);
+  const whooshRef = useRef<HTMLAudioElement | null>(null);
   const particlesRef = useRef<Particle[]>([]);
-  const fireballRef = useRef<Fireball | null>(null);
   const queueRef = useRef<number[]>([]);
   const runningRef = useRef(false);
   const finishedRef = useRef(false);
@@ -73,75 +67,80 @@ export function MageCanvas({
     chromaOffscreenRef.current = document.createElement('canvas');
     lastMageFrameRef.current = document.createElement('canvas');
 
-    const video = document.createElement('video');
-    video.src = `${MAGE_MP4_SRC}?v=loop2`;
-    video.muted = true;
-    // Manual seamless loop — HTML loop=true often flashes a blank/keyframe frame
-    video.loop = false;
-    video.playsInline = true;
-    video.preload = 'auto';
-    video.setAttribute('playsinline', '');
-    video.setAttribute('webkit-playsinline', '');
+    const whoosh = new Audio(FIREBALL_WHOOSH_SRC);
+    whoosh.preload = 'auto';
+    whoosh.volume = 0.7;
+    whooshRef.current = whoosh;
 
-    // Wrap within ~1 frame of the end → start (avoids cutting visible motion)
-    const LOOP_IN = 0.001;
-    const LOOP_OUT_PAD = 1 / 24;
-
-    const tryPlay = () => {
-      video.play().catch(() => {});
-    };
-
-    const wrapLoop = () => {
-      if (!Number.isFinite(video.duration) || video.duration <= LOOP_OUT_PAD * 2) return;
-      if (video.seeking) return;
-      if (video.currentTime >= video.duration - LOOP_OUT_PAD) {
-        videoSeekingRef.current = true;
-        try {
-          video.currentTime = LOOP_IN;
-        } catch {
-          /* ignore seek race */
-        }
+    const makeVideo = (src: string, loopManual: boolean) => {
+      const video = document.createElement('video');
+      video.src = src;
+      video.muted = true;
+      video.loop = false;
+      video.playsInline = true;
+      video.preload = 'auto';
+      video.setAttribute('playsinline', '');
+      video.setAttribute('webkit-playsinline', '');
+      if (loopManual) {
+        const LOOP_IN = 0.001;
+        const LOOP_OUT_PAD = 1 / 24;
+        const wrapLoop = () => {
+          if (castingRef.current) return;
+          if (!Number.isFinite(video.duration) || video.duration <= LOOP_OUT_PAD * 2) return;
+          if (video.seeking) return;
+          if (video.currentTime >= video.duration - LOOP_OUT_PAD) {
+            videoSeekingRef.current = true;
+            try {
+              video.currentTime = LOOP_IN;
+            } catch {
+              /* ignore */
+            }
+          }
+        };
+        let loopRaf = 0;
+        const loopTick = () => {
+          wrapLoop();
+          loopRaf = requestAnimationFrame(loopTick);
+        };
+        video.addEventListener('loadeddata', () => {
+          cancelAnimationFrame(loopRaf);
+          loopRaf = requestAnimationFrame(loopTick);
+        });
+        video.addEventListener('seeking', () => {
+          if (!castingRef.current) videoSeekingRef.current = true;
+        });
+        video.addEventListener('seeked', () => {
+          requestAnimationFrame(() => {
+            if (!castingRef.current) videoSeekingRef.current = false;
+          });
+        });
+        (video as HTMLVideoElement & { __stopLoop?: () => void }).__stopLoop = () => {
+          cancelAnimationFrame(loopRaf);
+        };
       }
+      video.load();
+      return video;
     };
 
-    // High-frequency loop check (timeupdate alone is too coarse and causes a visible skip)
-    let loopRaf = 0;
-    const loopTick = () => {
-      wrapLoop();
-      loopRaf = requestAnimationFrame(loopTick);
+    const idle = makeVideo(`${MAGE_IDLE_SRC}?v=idle`, true);
+    const cast = makeVideo(`${MAGE_CAST_SRC}?v=cast7`, false);
+    cast.loop = false;
+
+    idleVideoRef.current = idle;
+    castVideoRef.current = cast;
+    activeVideoRef.current = idle;
+
+    const tryPlayIdle = () => {
+      if (castingRef.current) return;
+      idle.play().catch(() => {});
     };
 
-    video.addEventListener('loadeddata', () => {
-      mageVideoRef.current = video;
-      tryPlay();
-      cancelAnimationFrame(loopRaf);
-      loopRaf = requestAnimationFrame(loopTick);
-    });
-    video.addEventListener('ended', () => {
-      videoSeekingRef.current = true;
-      video.currentTime = LOOP_IN;
-      tryPlay();
-    });
-    video.addEventListener('seeking', () => {
-      videoSeekingRef.current = true;
-    });
-    video.addEventListener('seeked', () => {
-      // Keep holding last frame for one more paint, then resume live video
-      requestAnimationFrame(() => {
-        videoSeekingRef.current = false;
-        tryPlay();
-      });
-    });
-    video.addEventListener('error', () => {
-      if (video.src.includes('mage.mp4')) {
-        video.src = MAGE_WEBM_SRC;
-        video.load();
-        return;
+    idle.addEventListener('loadeddata', () => {
+      if (!castingRef.current) {
+        activeVideoRef.current = idle;
+        tryPlayIdle();
       }
-      console.warn('[Mage Keno] mage video failed — falling back to mage.png');
-      mageVideoRef.current = null;
     });
-    video.load();
 
     const img = new Image();
     img.src = MAGE_IMG_SRC;
@@ -150,7 +149,11 @@ export function MageCanvas({
     };
 
     const unlock = () => {
-      tryPlay();
+      tryPlayIdle();
+      whoosh.play().then(() => {
+        whoosh.pause();
+        whoosh.currentTime = 0;
+      }).catch(() => {});
     };
     window.addEventListener('pointerdown', unlock, { once: true });
     window.addEventListener('keydown', unlock, { once: true });
@@ -158,11 +161,18 @@ export function MageCanvas({
     return () => {
       window.removeEventListener('pointerdown', unlock);
       window.removeEventListener('keydown', unlock);
-      cancelAnimationFrame(loopRaf);
-      video.pause();
-      video.removeAttribute('src');
-      video.load();
-      mageVideoRef.current = null;
+      (idle as HTMLVideoElement & { __stopLoop?: () => void }).__stopLoop?.();
+      idle.pause();
+      cast.pause();
+      idle.removeAttribute('src');
+      cast.removeAttribute('src');
+      idle.load();
+      cast.load();
+      idleVideoRef.current = null;
+      castVideoRef.current = null;
+      activeVideoRef.current = null;
+      whoosh.pause();
+      whooshRef.current = null;
     };
   }, []);
 
@@ -194,12 +204,49 @@ export function MageCanvas({
     return (gRect.bottom - cRect.top) * scaleY;
   };
 
-  const getMageStaffPoint = (): { x: number; y: number } => {
-    const canvas = canvasRef.current;
-    if (!canvas) return { x: 80, y: 200 };
-    // Staff sits in upper-mid of the mage after feet are pinned to grid bottom
-    const bottom = getGridBottom();
-    return { x: canvas.width * 0.2, y: Math.max(canvas.height * 0.22, bottom - canvas.height * 0.42) };
+  const startCastPlayback = () => {
+    const idle = idleVideoRef.current;
+    const cast = castVideoRef.current;
+    if (!cast) {
+      castDoneRef.current = true;
+      return;
+    }
+    castingRef.current = true;
+    castDoneRef.current = false;
+    videoSeekingRef.current = false;
+    idle?.pause();
+    cast.loop = false;
+    cast.currentTime = 0;
+    activeVideoRef.current = cast;
+
+    const finish = () => {
+      cast.removeEventListener('ended', finish);
+      cast.pause();
+      // Return to idle as soon as cast finishes; then number reveals can start
+      castingRef.current = false;
+      if (idle) {
+        activeVideoRef.current = idle;
+        idle.play().catch(() => {});
+      }
+      castDoneRef.current = true;
+    };
+
+    cast.addEventListener('ended', finish);
+    cast.play().catch(() => {
+      finish();
+    });
+  };
+
+  const stopCastPlayback = () => {
+    const idle = idleVideoRef.current;
+    const cast = castVideoRef.current;
+    castingRef.current = false;
+    castDoneRef.current = true;
+    cast?.pause();
+    if (idle) {
+      activeVideoRef.current = idle;
+      idle.play().catch(() => {});
+    }
   };
 
   useEffect(() => {
@@ -212,8 +259,9 @@ export function MageCanvas({
     queueRef.current = [...activeDraw.numbers];
     runningRef.current = true;
     finishedRef.current = false;
-    fireballRef.current = null;
+    castDoneRef.current = false;
     particlesRef.current = [];
+    startCastPlayback();
   }, [activeDraw]);
 
   useEffect(() => {
@@ -225,6 +273,7 @@ export function MageCanvas({
       if (finishedRef.current) return;
       finishedRef.current = true;
       runningRef.current = false;
+      stopCastPlayback();
       callbacksRef.current.onSequenceComplete();
     };
 
@@ -242,32 +291,58 @@ export function MageCanvas({
 
     let raf = 0;
     let last = performance.now();
-    let launchTimer: number | null = null;
+    let revealTimer: number | null = null;
 
-    const launchNext = () => {
+    const playWhoosh = () => {
+      const master = whooshRef.current;
+      if (!master) return;
+      try {
+        const shot = master.cloneNode(true) as HTMLAudioElement;
+        shot.volume = master.volume;
+        void shot.play().catch(() => {});
+      } catch {
+        master.currentTime = 0;
+        void master.play().catch(() => {});
+      }
+    };
+
+    const revealNext = () => {
       const next = queueRef.current.shift();
       if (next == null) {
         completeOnce();
         return;
       }
-      const from = getMageStaffPoint();
-      const to = getBallCenter(next) ?? { x: canvas.width * 0.6, y: canvas.height * 0.5 };
-      fireballRef.current = {
-        x: from.x,
-        y: from.y,
-        fromX: from.x,
-        fromY: from.y,
-        toX: to.x,
-        toY: to.y,
-        t: 0,
-        duration: 420 + Math.random() * 80,
-        number: next,
-        done: false,
-      };
+      playWhoosh();
+      const hit = selectedRef.current.has(next);
+      const at = getBallCenter(next);
+      callbacksRef.current.onFireballImpact(next);
+      if (at) {
+        if (hit) {
+          particlesRef.current.push(...spawnExplosion(at.x, at.y, 34));
+          flashRef.current = 180;
+        } else {
+          particlesRef.current.push(
+            ...spawnExplosion(at.x, at.y, 10).map((p) => ({
+              ...p,
+              color: '#ff5a6a',
+              vx: p.vx * 0.45,
+              vy: p.vy * 0.45,
+            })),
+          );
+        }
+      }
+      revealTimer = window.setTimeout(() => {
+        revealTimer = null;
+        if (queueRef.current.length > 0) revealNext();
+        else if (particlesRef.current.length === 0) completeOnce();
+        else {
+          // wait for particles in tick
+        }
+      }, hit ? REVEAL_INTERVAL_MS + 80 : REVEAL_INTERVAL_MS);
     };
 
     const drawMage = (ctx: CanvasRenderingContext2D) => {
-      const video = mageVideoRef.current;
+      const video = activeVideoRef.current;
       const img = mageImgRef.current;
       const off = chromaOffscreenRef.current;
       const lastFrame = lastMageFrameRef.current;
@@ -291,7 +366,9 @@ export function MageCanvas({
         srcW = video.videoWidth;
         srcH = video.videoHeight;
         keyLive = true;
-        if (video.paused) video.play().catch(() => {});
+        if (video.paused && castingRef.current && !castDoneRef.current) {
+          video.play().catch(() => {});
+        }
       } else if (lastFrame && lastFrame.width > 0) {
         source = lastFrame;
         srcW = lastFrame.width;
@@ -309,9 +386,13 @@ export function MageCanvas({
       const mageW = srcW > 0 ? srcW * scale : boxW * 0.9;
       const mageH = srcH > 0 ? srcH * scale : boxH * 0.9;
       const mageX = canvas.width * 0.055;
-      // Pin feet to the bottom of the last keno row
       const gridBottom = getGridBottom();
       const mageY = Math.max(8, (gridBottom || canvas.height * 0.92) - mageH);
+
+      // Cast clip is brighter green; idle uses similar key
+      const key = castingRef.current
+        ? { keyR: 22, keyG: 223, keyB: 13 }
+        : { keyR: 25, keyG: 225, keyB: 13 };
 
       if (source && off && srcW > 0 && keyLive) {
         drawChromaKeyedFrame(
@@ -327,9 +408,7 @@ export function MageCanvas({
           mageH,
           off,
           {
-            keyR: 25,
-            keyG: 225,
-            keyB: 13,
+            ...key,
             similarity: 0.48,
             blend: 0.04,
             despill: 0.88,
@@ -349,22 +428,6 @@ export function MageCanvas({
         }
       } else if (source) {
         ctx.drawImage(source, mageX, mageY, mageW, mageH);
-      } else {
-        ctx.fillStyle = 'rgba(120, 80, 200, 0.55)';
-        ctx.beginPath();
-        ctx.ellipse(
-          mageX + mageW * 0.5,
-          mageY + mageH * 0.55,
-          mageW * 0.28,
-          mageH * 0.42,
-          0,
-          0,
-          Math.PI * 2,
-        );
-        ctx.fill();
-        ctx.fillStyle = '#c9a44a';
-        ctx.font = `bold ${Math.floor(canvas.width * 0.018)}px Orbitron, sans-serif`;
-        ctx.fillText('MAGE', mageX + mageW * 0.22, mageY + mageH * 0.95);
       }
     };
 
@@ -386,69 +449,33 @@ export function MageCanvas({
         ctx.fillRect(0, 0, canvas.width, canvas.height);
       }
 
-      if (runningRef.current && !fireballRef.current && queueRef.current.length > 0 && launchTimer == null) {
-        launchNext();
+      // Fallback if 'ended' doesn't fire — mark cast done near the end
+      if (castingRef.current && !castDoneRef.current) {
+        const cast = castVideoRef.current;
+        const idle = idleVideoRef.current;
+        if (
+          cast &&
+          Number.isFinite(cast.duration) &&
+          cast.duration > 0 &&
+          cast.currentTime >= cast.duration - 0.05
+        ) {
+          cast.pause();
+          castingRef.current = false;
+          if (idle) {
+            activeVideoRef.current = idle;
+            idle.play().catch(() => {});
+          }
+          castDoneRef.current = true;
+        }
       }
 
-      const fb = fireballRef.current;
-      if (fb && !fb.done) {
-        fb.t += dt;
-        const u = Math.min(1, fb.t / fb.duration);
-        const e = easeOutCubic(u);
-        const arc = Math.sin(u * Math.PI) * (canvas.height * 0.06);
-        fb.x = lerp(fb.fromX, fb.toX, e);
-        fb.y = lerp(fb.fromY, fb.toY, e) - arc;
-
-        const r = 10 + Math.sin(now / 40) * 2;
-        const grd = ctx.createRadialGradient(fb.x, fb.y, 0, fb.x, fb.y, r * 2.4);
-        grd.addColorStop(0, '#fff6c8');
-        grd.addColorStop(0.35, '#ff9a1a');
-        grd.addColorStop(1, 'rgba(255, 60, 0, 0)');
-        ctx.fillStyle = grd;
-        ctx.beginPath();
-        ctx.arc(fb.x, fb.y, r * 2.4, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#ffe566';
-        ctx.beginPath();
-        ctx.arc(fb.x, fb.y, r * 0.55, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.strokeStyle = 'rgba(255, 140, 40, 0.55)';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(fb.fromX, fb.fromY);
-        ctx.quadraticCurveTo(
-          (fb.fromX + fb.x) / 2,
-          Math.min(fb.fromY, fb.y) - arc * 1.4,
-          fb.x,
-          fb.y,
-        );
-        ctx.stroke();
-
-        if (u >= 1) {
-          fb.done = true;
-          const hit = selectedRef.current.has(fb.number);
-          callbacksRef.current.onFireballImpact(fb.number);
-          if (hit) {
-            particlesRef.current.push(...spawnExplosion(fb.toX, fb.toY, 34));
-            flashRef.current = 180;
-          } else {
-            particlesRef.current.push(
-              ...spawnExplosion(fb.toX, fb.toY, 10).map((p) => ({
-                ...p,
-                color: '#ff5a6a',
-                vx: p.vx * 0.45,
-                vy: p.vy * 0.45,
-              })),
-            );
-          }
-          fireballRef.current = null;
-          launchTimer = window.setTimeout(() => {
-            launchTimer = null;
-            if (queueRef.current.length > 0) launchNext();
-            else if (particlesRef.current.length === 0) completeOnce();
-          }, hit ? 220 : 120);
-        }
+      if (
+        runningRef.current &&
+        castDoneRef.current &&
+        queueRef.current.length > 0 &&
+        revealTimer == null
+      ) {
+        revealNext();
       }
 
       updateParticles(particlesRef.current, dt);
@@ -456,8 +483,8 @@ export function MageCanvas({
 
       if (
         runningRef.current &&
-        !fireballRef.current &&
-        launchTimer == null &&
+        castDoneRef.current &&
+        revealTimer == null &&
         queueRef.current.length === 0 &&
         particlesRef.current.length === 0
       ) {
@@ -470,7 +497,7 @@ export function MageCanvas({
     raf = requestAnimationFrame(tick);
     return () => {
       cancelAnimationFrame(raf);
-      if (launchTimer != null) window.clearTimeout(launchTimer);
+      if (revealTimer != null) window.clearTimeout(revealTimer);
       ro.disconnect();
     };
   }, [gridRef]);

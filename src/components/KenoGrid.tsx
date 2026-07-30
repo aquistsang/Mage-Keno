@@ -17,6 +17,9 @@ const stateClass: Record<BallVisualState, string> = {
   hit: 'ball-hit',
 };
 
+const PICK_MARK_SRC = './assets/pick-mark.png';
+const PICK_MARK_HIT_SRC = './assets/pick-mark-hit.png';
+
 export function KenoGrid({ selected, ballState, disabled, onToggle, gridRef }: Props) {
   const numbers = Array.from({ length: GRID_SIZE }, (_, i) => i + 1);
 
@@ -31,17 +34,31 @@ export function KenoGrid({ selected, ballState, disabled, onToggle, gridRef }: P
     >
       {numbers.map((n) => {
         const visual = ballState.get(n) ?? (selected.has(n) ? 'selected' : 'idle');
+        const flipped = visual === 'selected' || visual === 'hit';
+        const markSrc = visual === 'hit' ? PICK_MARK_HIT_SRC : PICK_MARK_SRC;
         return (
           <button
             key={n}
             type="button"
             data-num={n}
             disabled={disabled}
-            className={`keno-ball ${stateClass[visual]}`}
+            className={`keno-ball ${stateClass[visual]} ${flipped ? 'is-flipped' : ''}`}
             onClick={() => onToggle(n)}
             aria-pressed={selected.has(n)}
+            aria-label={
+              visual === 'hit'
+                ? `Number ${n} matched`
+                : flipped
+                  ? `Number ${n} selected`
+                  : `Number ${n}`
+            }
           >
-            {n}
+            <span className="keno-ball-inner">
+              <span className="keno-ball-face keno-ball-front">{n}</span>
+              <span className="keno-ball-face keno-ball-back" aria-hidden="true">
+                <img src={markSrc} alt="" className="keno-pick-mark" draggable={false} />
+              </span>
+            </span>
           </button>
         );
       })}
