@@ -20,6 +20,8 @@ const stateClass: Record<BallVisualState, string> = {
 
 const PICK_GOBLIN_WEBM = './assets/pick-goblin.webm';
 const PICK_GOBLIN_PNG = './assets/pick-goblin.png';
+/** Stunned / dead goblin shown when a pick matches the draw */
+const PICK_GOBLIN_HIT_PNG = './assets/pick-mark-hit.png';
 
 function isMobileUi(): boolean {
   if (typeof window === 'undefined') return false;
@@ -56,6 +58,8 @@ function GoblinMark({
   const markClass = `keno-pick-mark${hit ? ' is-hit-mark' : ''}`;
 
   useEffect(() => {
+    // Hits use the static stunned art — don't register for the live animation
+    if (hit) return;
     const canvas = canvasRef.current;
     if (!canvas || fallback) return;
     const size = canvasSize();
@@ -63,7 +67,13 @@ function GoblinMark({
     canvas.height = size;
     api.register(canvas);
     return () => api.unregister(canvas);
-  }, [api, fallback]);
+  }, [api, fallback, hit]);
+
+  if (hit) {
+    return (
+      <img src={PICK_GOBLIN_HIT_PNG} alt="" className={markClass} draggable={false} />
+    );
+  }
 
   if (fallback) {
     return <img src={PICK_GOBLIN_PNG} alt="" className={markClass} draggable={false} />;
@@ -90,18 +100,18 @@ export function KenoGrid({ selected, ballState, disabled, onToggle, gridRef }: P
     [],
   );
 
-  let flippedCount = 0;
+  let liveCount = 0;
   for (const num of numbers) {
     const visual = ballState.get(num) ?? (selected.has(num) ? 'selected' : 'idle');
-    if (visual === 'selected' || visual === 'hit') flippedCount += 1;
+    if (visual === 'selected') liveCount += 1;
   }
 
-  // One shared decoder — play only while picks are showing
+  // One shared decoder — play only while non-hit picks are showing
   useEffect(() => {
     const video = videoRef.current;
     if (!video || fallback) return;
 
-    if (flippedCount === 0) {
+    if (liveCount === 0) {
       video.pause();
       return;
     }
@@ -114,7 +124,7 @@ export function KenoGrid({ selected, ballState, disabled, onToggle, gridRef }: P
     else video.addEventListener('loadeddata', play, { once: true });
 
     return () => video.removeEventListener('loadeddata', play);
-  }, [flippedCount, fallback]);
+  }, [liveCount, fallback]);
 
   // Paint all pick canvases from the single video frame
   useEffect(() => {

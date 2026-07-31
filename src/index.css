@@ -422,6 +422,14 @@ body {
   flex: 1 1 0;
 }
 
+.payout-row.is-zero {
+  opacity: 0.45;
+}
+
+.payout-row.is-zero .payout-mult {
+  color: var(--muted);
+}
+
 .payout-hit {
   font-size: 10px;
   color: var(--muted);
