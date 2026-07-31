@@ -1,13 +1,32 @@
-import { useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { BetControls } from './components/BetControls';
 import { KenoGrid } from './components/KenoGrid';
 import { MageCanvas } from './components/MageCanvas';
 import { PayoutTable } from './components/PayoutTable';
+import { StaffImpact } from './components/StaffImpact';
 import { useKenoGame } from './hooks/useKenoGame';
 
 export default function App() {
   const game = useKenoGame();
   const gridRef = useRef<HTMLDivElement>(null);
+  const [impactPlaying, setImpactPlaying] = useState(false);
+  const [impactComplete, setImpactComplete] = useState(false);
+
+  // Reset impact pipeline for each new bet/draw
+  useEffect(() => {
+    setImpactPlaying(false);
+    setImpactComplete(false);
+  }, [game.activeDraw?.id]);
+
+  const onStaffHit = useCallback(() => {
+    setImpactComplete(false);
+    setImpactPlaying(true);
+  }, []);
+
+  const onImpactEnded = useCallback(() => {
+    setImpactPlaying(false);
+    setImpactComplete(true);
+  }, []);
 
   return (
     <div className={`app-shell ${game.flashHit ? 'is-flash' : ''}`}>
@@ -26,17 +45,22 @@ export default function App() {
               gridRef={gridRef}
               selected={game.selected}
               activeDraw={game.activeDraw}
+              impactComplete={impactComplete}
+              onStaffHit={onStaffHit}
               onFireballImpact={game.onFireballImpact}
               onSequenceComplete={game.onSequenceComplete}
             />
-            <div className="grid-panel">
-              <KenoGrid
-                gridRef={gridRef}
-                selected={game.selected}
-                ballState={game.ballState}
-                disabled={game.phase === 'playing'}
-                onToggle={game.toggleNumber}
-              />
+            <div className={`grid-panel${impactPlaying ? ' is-impact' : ''}`}>
+              <div className="keno-grid-slot">
+                <KenoGrid
+                  gridRef={gridRef}
+                  selected={game.selected}
+                  ballState={game.ballState}
+                  disabled={game.phase === 'playing'}
+                  onToggle={game.toggleNumber}
+                />
+                <StaffImpact active={impactPlaying} onEnded={onImpactEnded} />
+              </div>
             </div>
           </div>
           <PayoutTable />

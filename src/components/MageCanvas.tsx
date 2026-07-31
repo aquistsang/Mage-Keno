@@ -12,6 +12,9 @@ type Props = {
   gridRef: RefObject<HTMLDivElement | null>;
   selected: Set<number>;
   activeDraw: { id: number; numbers: number[] } | null;
+  /** True after the staff-impact overlay finishes (or is skipped). */
+  impactComplete: boolean;
+  onStaffHit: () => void;
   onFireballImpact: (n: number) => void;
   onSequenceComplete: () => void;
 };
@@ -26,11 +29,17 @@ const MAGE_IMG_SRC = './assets/mage.png';
 const FIREBALL_WHOOSH_SRC = './assets/fireball-whoosh.mp3';
 
 const REVEAL_INTERVAL_MS = 280;
+/** Staff strikes the ground in mage-cast.mp4 around this timestamp. */
+const CAST_STAFF_HIT_SEC = 2.9;
+/** Keep playing cast this long after the hit before the impact overlay. */
+const CAST_AFTER_HIT_HOLD_SEC = 1;
 
 export function MageCanvas({
   gridRef,
   selected,
   activeDraw,
+  impactComplete,
+  onStaffHit,
   onFireballImpact,
   onSequenceComplete,
 }: Props) {
@@ -45,6 +54,8 @@ export function MageCanvas({
   const videoSeekingRef = useRef(false);
   const castingRef = useRef(false);
   const castDoneRef = useRef(true);
+  const staffHitRef = useRef(false);
+  const waitingImpactRef = useRef(false);
   const whooshRef = useRef<HTMLAudioElement | null>(null);
   const particlesRef = useRef<Particle[]>([]);
   const queueRef = useRef<number[]>([]);
@@ -53,15 +64,25 @@ export function MageCanvas({
   const selectedRef = useRef(selected);
   const flashRef = useRef(0);
   const lastDrawIdRef = useRef<number | null>(null);
-  const callbacksRef = useRef({ onFireballImpact, onSequenceComplete });
+  const callbacksRef = useRef({ onFireballImpact, onSequenceComplete, onStaffHit });
+  const impactCompleteRef = useRef(impactComplete);
 
   useEffect(() => {
     selectedRef.current = selected;
   }, [selected]);
 
   useEffect(() => {
-    callbacksRef.current = { onFireballImpact, onSequenceComplete };
-  }, [onFireballImpact, onSequenceComplete]);
+    callbacksRef.current = { onFireballImpact, onSequenceComplete, onStaffHit };
+  }, [onFireballImpact, onSequenceComplete, onStaffHit]);
+
+  useEffect(() => {
+    impactCompleteRef.current = impactComplete;
+    // Impact overlay finished — allow number reveals to begin
+    if (impactComplete && waitingImpactRef.current && !castDoneRef.current) {
+      waitingImpactRef.current = false;
+      castDoneRef.current = true;
+    }
+  }, [impactComplete]);
 
   useEffect(() => {
     chromaOffscreenRef.current = document.createElement('canvas');
@@ -220,32 +241,56 @@ export function MageCanvas({
     const idle = idleVideoRef.current;
     const cast = castVideoRef.current;
     if (!cast) {
-      castDoneRef.current = true;
+      // No cast clip — jump straight to impact/reveal pipeline
+      staffHitRef.current = true;
+      waitingImpactRef.current = true;
+      callbacksRef.current.onStaffHit();
       return;
     }
     castingRef.current = true;
     castDoneRef.current = false;
+    staffHitRef.current = false;
+    waitingImpactRef.current = false;
     videoSeekingRef.current = false;
     idle?.pause();
     cast.loop = false;
     cast.currentTime = 0;
     activeVideoRef.current = cast;
 
-    const finish = () => {
-      cast.removeEventListener('ended', finish);
+    let hitHandled = false;
+    const cutAt = CAST_STAFF_HIT_SEC + CAST_AFTER_HIT_HOLD_SEC;
+
+    const handleStaffHit = () => {
+      if (hitHandled) return;
+      hitHandled = true;
+      staffHitRef.current = true;
+      cast.removeEventListener('ended', onEnded);
+      cast.removeEventListener('timeupdate', onTimeUpdate);
       cast.pause();
-      // Return to idle as soon as cast finishes; then number reveals can start
       castingRef.current = false;
       if (idle) {
         activeVideoRef.current = idle;
         idle.play().catch(() => {});
       }
-      castDoneRef.current = true;
+      // Hold reveals until impact overlay finishes
+      waitingImpactRef.current = true;
+      castDoneRef.current = false;
+      callbacksRef.current.onStaffHit();
     };
 
-    cast.addEventListener('ended', finish);
+    const onTimeUpdate = () => {
+      if (cast.currentTime >= cutAt) handleStaffHit();
+    };
+
+    const onEnded = () => {
+      // Fallback if staff-hit timestamp was missed
+      handleStaffHit();
+    };
+
+    cast.addEventListener('timeupdate', onTimeUpdate);
+    cast.addEventListener('ended', onEnded);
     cast.play().catch(() => {
-      finish();
+      handleStaffHit();
     });
   };
 
@@ -264,6 +309,8 @@ export function MageCanvas({
   useEffect(() => {
     if (!activeDraw) {
       lastDrawIdRef.current = null;
+      staffHitRef.current = false;
+      waitingImpactRef.current = false;
       return;
     }
     if (lastDrawIdRef.current === activeDraw.id && runningRef.current) return;
@@ -272,6 +319,8 @@ export function MageCanvas({
     runningRef.current = true;
     finishedRef.current = false;
     castDoneRef.current = false;
+    staffHitRef.current = false;
+    waitingImpactRef.current = false;
     particlesRef.current = [];
     startCastPlayback();
   }, [activeDraw]);
@@ -485,24 +534,39 @@ export function MageCanvas({
         ctx.fillRect(0, 0, canvas.width, canvas.height);
       }
 
-      // Fallback if 'ended' doesn't fire — mark cast done near the end
-      if (castingRef.current && !castDoneRef.current) {
+      // Staff-hit + hold fallback if timeupdate is sparse
+      if (castingRef.current && !staffHitRef.current) {
         const cast = castVideoRef.current;
         const idle = idleVideoRef.current;
-        if (
+        const cutAt = CAST_STAFF_HIT_SEC + CAST_AFTER_HIT_HOLD_SEC;
+        const nearEnd =
           cast &&
           Number.isFinite(cast.duration) &&
           cast.duration > 0 &&
-          cast.currentTime >= cast.duration - 0.05
-        ) {
+          cast.currentTime >= cast.duration - 0.05;
+        const hitNow = cast && cast.currentTime >= cutAt;
+        if (hitNow || nearEnd) {
+          staffHitRef.current = true;
           cast.pause();
           castingRef.current = false;
           if (idle) {
             activeVideoRef.current = idle;
             idle.play().catch(() => {});
           }
-          castDoneRef.current = true;
+          waitingImpactRef.current = true;
+          castDoneRef.current = false;
+          callbacksRef.current.onStaffHit();
         }
+      }
+
+      // Impact overlay finished while we were waiting
+      if (
+        waitingImpactRef.current &&
+        impactCompleteRef.current &&
+        !castDoneRef.current
+      ) {
+        waitingImpactRef.current = false;
+        castDoneRef.current = true;
       }
 
       if (
