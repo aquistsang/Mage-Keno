@@ -63,7 +63,7 @@ export default function App() {
               </div>
             </div>
           </div>
-          <PayoutTable />
+          <PayoutTable spots={game.selected.size} />
         </section>
       </main>
 

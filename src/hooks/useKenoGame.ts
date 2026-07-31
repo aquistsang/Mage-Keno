@@ -167,7 +167,7 @@ export function useKenoGame(): UseKenoGameResult {
     const picks = selectedRef.current;
     const current = revealedRef.current;
     const matches = current.filter((n) => picks.has(n)).length;
-    const mult = payoutMultiplier(matches);
+    const mult = payoutMultiplier(matches, picks.size);
     const win = Math.floor(betRef.current * mult);
     setLastMatches(matches);
     setLastMultiplier(mult);
