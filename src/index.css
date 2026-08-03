@@ -12,6 +12,13 @@
   --muted: #c48aa4;
   --green: #39d98a;
   --green-deep: #0f8f52;
+  /* Night-sky frame — violet rim + warm sunset highlight */
+  --frame-edge: #c478ff;
+  --frame-edge-soft: rgba(196, 120, 255, 0.55);
+  --frame-warm: #ff8a5c;
+  --frame-deep: #1a0a2e;
+  --font-ui: Orbitron, system-ui, sans-serif;
+  --font-num: Rajdhani, Orbitron, system-ui, sans-serif;
 }
 
 * {
@@ -22,12 +29,22 @@ html,
 body,
 #root {
   margin: 0;
-  min-height: 100%;
+  width: 100%;
   height: 100%;
+  min-height: 100%;
+  overflow: hidden;
+}
+
+/* Container for layout breakpoints — iframe media queries often see the
+   parent device width, so @media (max-width) never fires while the iframe
+   itself is phone-narrow. Size against #root's real box instead. */
+#root {
+  container-type: size;
+  container-name: mage-keno;
 }
 
 body {
-  font-family: Orbitron, system-ui, sans-serif;
+  font-family: var(--font-ui);
   color: var(--text);
   background:
     radial-gradient(ellipse at 50% 0%, #6a1438 0%, transparent 50%),
@@ -53,12 +70,16 @@ body {
 .app-shell {
   min-height: 100%;
   height: 100%;
+  max-height: 100%;
+  width: 100%;
   display: flex;
   flex-direction: column;
   gap: 0;
   padding: 12px 14px 14px;
   max-width: 1200px;
   margin: 0 auto;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .app-shell.is-flash {
@@ -106,9 +127,10 @@ body {
 
 .tagline {
   margin: 6px 0 0;
-  font-size: 11px;
-  color: var(--muted);
+  font-size: 13px;
+  color: #f6d6e6;
   letter-spacing: 0.06em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
 }
 
 .stage {
@@ -130,17 +152,33 @@ body {
 
 .arena-frame {
   position: relative;
-  border: 3px solid var(--gold);
+  border: 2px solid transparent;
   border-radius: 14px 14px 0 0;
-  background:
-    linear-gradient(180deg, rgba(90, 10, 40, 0.65) 0%, rgba(20, 4, 12, 0.92) 100%);
+  background-color: #12081c;
+  /* Mobile portrait sky; desktop overrides via container query */
+  background-image: var(--arena-bg-mobile, var(--arena-bg, none));
+  background-size: 100% 100%;
+  background-position: center;
+  background-repeat: no-repeat;
+  /* Violet rim + warm sunset wash matching the sky art */
   box-shadow:
-    0 0 0 2px #4a0818,
-    0 0 28px rgba(224, 24, 106, 0.35),
-    inset 0 0 40px rgba(0, 0, 0, 0.45);
+    0 0 0 1px rgba(255, 138, 92, 0.35),
+    0 0 0 3px rgba(88, 40, 140, 0.85),
+    0 0 22px rgba(196, 120, 255, 0.35),
+    0 0 40px rgba(255, 100, 60, 0.12),
+    inset 0 0 0 1px rgba(255, 200, 170, 0.18),
+    inset 0 0 28px rgba(20, 4, 40, 0.35);
   overflow: hidden;
   min-height: 0;
   flex: 0 0 auto;
+}
+
+/* Desktop: wide sky art, stretched to fill the arena */
+@container mage-keno (min-width: 861px) {
+  .arena-frame {
+    background-image: var(--arena-bg-desktop, var(--arena-bg-mobile, none));
+    background-size: 100% 100%;
+  }
 }
 
 .mage-canvas-wrap {
@@ -158,17 +196,14 @@ body {
 
 .grid-panel {
   position: relative;
-  z-index: 1;
-  /* Reserve left column for mage — keeps numbers clear of character */
-  padding: 14px 16px 10px clamp(240px, 42vw, 400px);
+  z-index: 4;
+  /* Reserve left column for mage — cqw tracks the iframe box, not a
+     lied-about device viewport (vw inside iframes is unreliable). */
+  padding: 14px 16px 10px clamp(120px, 42cqw, 400px);
   min-height: 0;
   display: flex;
   align-items: flex-start;
   justify-content: flex-end;
-}
-
-.grid-panel.is-impact .keno-grid {
-  visibility: hidden;
 }
 
 .keno-grid-slot {
@@ -184,16 +219,23 @@ body {
   max-width: none;
 }
 
+/* Firestorm behind the mage (chroma key lets it show through) */
 .staff-impact {
   position: absolute;
   inset: 0;
-  z-index: 6;
+  z-index: 1;
   display: grid;
   place-items: center;
-  background: #0a0408;
+  background: transparent;
   overflow: hidden;
   pointer-events: none;
-  border-radius: 10px;
+  opacity: 0;
+  visibility: hidden;
+}
+
+.staff-impact.is-active {
+  opacity: 1;
+  visibility: visible;
 }
 
 .staff-impact-video {
@@ -201,6 +243,17 @@ body {
   height: 100%;
   object-fit: cover;
   display: block;
+  filter: saturate(1.1) brightness(0.92);
+}
+
+.arena-frame.has-storm {
+  box-shadow:
+    0 0 0 1px rgba(255, 138, 92, 0.55),
+    0 0 0 3px rgba(88, 40, 140, 0.9),
+    0 0 36px rgba(255, 100, 30, 0.5),
+    0 0 48px rgba(196, 120, 255, 0.3),
+    inset 0 0 0 1px rgba(255, 200, 170, 0.22),
+    inset 0 0 40px rgba(40, 8, 20, 0.4);
 }
 
 .keno-grid {
@@ -226,6 +279,30 @@ body {
   box-shadow: none;
   perspective: 420px;
   -webkit-tap-highlight-color: transparent;
+  transform-origin: center center;
+}
+
+.keno-ball.is-hit-impact {
+  z-index: 8;
+  animation: hitImpactPop 0.5s cubic-bezier(0.22, 1.55, 0.36, 1);
+}
+
+@keyframes hitImpactPop {
+  0% {
+    transform: scale(1);
+  }
+  22% {
+    transform: scale(1.34);
+  }
+  48% {
+    transform: scale(0.9);
+  }
+  72% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 .keno-ball-inner {
@@ -250,20 +327,27 @@ body {
   border-radius: 999px;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
-  font-family: Nunito, "Segoe UI", sans-serif;
-  font-size: clamp(13px, 2.4vw, 20px);
-  font-weight: 800;
-  letter-spacing: -0.02em;
+  font-family: var(--font-num);
+  font-size: clamp(22px, 4.2vw, 32px);
+  font-weight: 700;
+  letter-spacing: 0.02em;
   line-height: 1;
-  border: 1.5px solid rgba(255, 200, 230, 0.25);
+  font-variant-numeric: tabular-nums;
+  border: 1.5px solid rgba(255, 210, 235, 0.55);
   box-shadow:
-    inset 0 2px 4px rgba(255, 255, 255, 0.12),
-    0 2px 0 #0a0206;
+    inset 0 2px 5px rgba(255, 255, 255, 0.22),
+    0 2px 0 rgba(8, 2, 12, 0.85);
 }
 
 .keno-ball-front {
-  color: #fff;
-  background: radial-gradient(circle at 35% 30%, #5a2040, #1a0810 70%);
+  color: #1a1000;
+  text-shadow: 0 1px 0 rgba(255, 230, 160, 0.35);
+  background: radial-gradient(circle at 35% 30%, #ffe08a, #c48a10 55%, #6a4508 100%);
+  border-color: #ffe566;
+  box-shadow:
+    0 0 14px rgba(240, 193, 75, 0.65),
+    inset 0 2px 4px rgba(255, 255, 255, 0.35),
+    0 2px 0 rgba(20, 10, 0, 0.65);
 }
 
 .keno-ball-back {
@@ -327,10 +411,31 @@ body {
 }
 
 .ball-miss .keno-ball-front {
-  background: radial-gradient(circle at 35% 30%, #3a3a42, #121218 75%);
-  color: #9a9aa8;
-  border-color: #3a3a48;
-  box-shadow: none;
+  background: transparent;
+  color: #1a1000;
+  text-shadow:
+    0 0 3px rgba(255, 245, 220, 0.95),
+    0 0 8px rgba(255, 255, 255, 0.55),
+    0 1px 0 rgba(255, 230, 160, 0.35);
+  border-color: rgba(255, 255, 255, 0.28);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.12),
+    inset 0 0 0 0 transparent;
+  animation: missReveal 0.4s ease-out;
+}
+
+@keyframes missReveal {
+  0% {
+    filter: brightness(1.25);
+    border-color: rgba(255, 255, 255, 0.55);
+    text-shadow:
+      0 0 4px rgba(255, 245, 220, 1),
+      0 0 12px rgba(255, 255, 255, 0.75),
+      0 1px 0 rgba(255, 230, 160, 0.45);
+  }
+  100% {
+    filter: none;
+  }
 }
 
 .ball-hit .keno-ball-back {
@@ -340,72 +445,100 @@ body {
     0 0 0 2px rgba(57, 255, 176, 0.85),
     0 0 22px rgba(255, 120, 40, 0.9),
     inset 0 2px 6px rgba(255, 255, 255, 0.4);
-  animation: hitPulse 0.45s ease-out;
+  animation: hitPulse 0.5s ease-out;
 }
 
 @keyframes hitPulse {
   0% {
-    transform: rotateY(180deg) scale(1.14);
+    transform: rotateY(180deg) scale(1.22);
+    filter: brightness(1.35);
   }
   100% {
     transform: rotateY(180deg) scale(1);
+    filter: none;
   }
 }
 
 .payout-panel {
-  display: flex;
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
   align-items: center;
   gap: 10px;
-  border: 2px solid rgba(240, 193, 75, 0.55);
-  border-top: 1px solid rgba(240, 193, 75, 0.35);
+  border: 2px solid rgba(196, 120, 255, 0.4);
+  border-top: 1px solid rgba(255, 138, 92, 0.28);
   border-radius: 0;
   background: var(--panel);
-  padding: 6px 12px;
-  box-shadow: inset 0 0 20px rgba(224, 24, 106, 0.15);
-  overflow-x: auto;
+  padding: 8px 12px;
+  box-shadow:
+    inset 0 0 20px rgba(88, 40, 140, 0.2),
+    0 0 16px rgba(196, 120, 255, 0.08);
+  overflow: hidden;
   flex: 0 0 auto;
   margin: 0;
+  min-height: 64px;
 }
 
 .payout-label {
-  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
+  align-items: center;
+  justify-content: center;
   gap: 2px;
-  min-width: 64px;
+  width: 88px;
+  min-width: 88px;
+  max-width: 88px;
+  text-align: center;
 }
 
 .payout-title {
   margin: 0;
-  font-family: Cinzel, serif;
-  font-size: 13px;
-  color: var(--gold);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
   letter-spacing: 0.08em;
+  text-transform: uppercase;
   white-space: nowrap;
+  text-align: center;
 }
 
 .payout-sub {
   margin: 0;
-  font-size: 9px;
-  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 0.02em;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  text-align: center;
+}
+
+.payout-spots {
+  display: inline-block;
+  min-width: 1.25em;
+  text-align: center;
+  color: var(--gold);
+  font-weight: 700;
 }
 
 .payout-table {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
+  font-family: var(--font-ui);
   font-size: 11px;
-  flex: 1;
   min-width: 0;
+  width: 100%;
 }
 
 .payout-table-line {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: nowrap;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 6px;
   min-width: 0;
+  width: 100%;
 }
 
 .payout-row {
@@ -413,13 +546,12 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  padding: 6px 8px;
+  gap: 3px;
+  padding: 6px 4px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(0, 0, 0, 0.35);
   border: 1px solid rgba(255, 255, 255, 0.06);
-  min-width: 44px;
-  flex: 1 1 0;
+  min-width: 0;
 }
 
 .payout-row.is-zero {
@@ -431,29 +563,38 @@ body {
 }
 
 .payout-hit {
-  font-size: 10px;
+  font-size: 12px;
+  font-weight: 500;
   color: var(--muted);
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
 }
 
 .payout-mult {
-  font-size: 12px;
+  font-family: var(--font-ui);
+  font-size: 17px;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  letter-spacing: 0.02em;
 }
 
 .bet-bar {
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
-  gap: 10px 12px;
-  align-items: end;
-  padding: 10px 12px;
-  border: 2px solid rgba(240, 193, 75, 0.45);
-  border-top: 1px solid rgba(240, 193, 75, 0.3);
+  gap: 8px 10px;
+  align-items: stretch;
+  padding: 8px 12px;
+  border: 2px solid rgba(196, 120, 255, 0.35);
+  border-top: 1px solid rgba(255, 138, 92, 0.22);
   border-radius: 0 0 12px 12px;
   background: var(--panel);
   margin: 0;
   flex: 0 0 auto;
+  min-height: 64px;
+  box-shadow: 0 0 18px rgba(88, 40, 140, 0.15);
 }
 
 .bet-row-stats {
@@ -474,23 +615,30 @@ body {
 .meta-pill {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 8px 10px;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 6px 10px;
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.35);
   border: 1px solid rgba(255, 255, 255, 0.06);
   min-width: 72px;
+  text-align: center;
 }
 
 .meta-label {
-  font-size: 9px;
+  font-size: 12px;
   color: var(--muted);
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  text-align: center;
 }
 
 .meta-value {
-  font-size: 14px;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.1;
+  text-align: center;
 }
 
 .btn-secondary,
@@ -504,11 +652,14 @@ body {
 }
 
 .btn-secondary {
-  padding: 10px 14px;
+  padding: 8px 14px;
   background: linear-gradient(180deg, #5a2040, #2a0c1c);
   color: var(--text);
-  font-size: 11px;
+  font-size: 14px;
   letter-spacing: 0.04em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .btn-secondary:hover:not(:disabled) {
@@ -525,54 +676,274 @@ body {
 .bet-amount {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   flex: 1 1 auto;
   min-width: 120px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(240, 193, 75, 0.35);
+  box-shadow: inset 0 0 18px rgba(224, 24, 106, 0.12);
+  text-align: center;
 }
 
 .bet-stepper {
   display: grid;
-  grid-template-columns: 40px 1fr 40px;
+  grid-template-columns: 36px 1fr 36px;
   gap: 6px;
   align-items: center;
+  width: 100%;
 }
 
 .bet-stepper input {
   width: 100%;
   min-width: 0;
+  appearance: textfield;
+  -moz-appearance: textfield;
   font-family: inherit;
-  font-size: 16px;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
   text-align: center;
-  padding: 10px 6px;
+  padding: 6px 4px;
   border-radius: 8px;
-  border: 2px solid #000;
-  background: #0a0408;
-  color: var(--text);
+  border: 1.5px solid rgba(240, 193, 75, 0.55);
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(90, 20, 48, 0.9) 0%, transparent 70%),
+    linear-gradient(180deg, #2a0c1a 0%, #12040a 100%);
+  color: var(--gold);
+  text-shadow: 0 0 10px rgba(240, 193, 75, 0.35);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 220, 160, 0.08),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.45);
+  outline: none;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.bet-stepper input::-webkit-outer-spin-button,
+.bet-stepper input::-webkit-inner-spin-button {
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.bet-stepper input:hover:not(:disabled) {
+  border-color: rgba(240, 193, 75, 0.85);
+}
+
+.bet-stepper input:focus-visible {
+  border-color: var(--gold);
+  box-shadow:
+    0 0 0 2px rgba(224, 24, 106, 0.35),
+    0 0 14px rgba(240, 193, 75, 0.25),
+    inset 0 1px 0 rgba(255, 220, 160, 0.1);
+}
+
+.bet-stepper input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .btn-step {
-  height: 42px;
-  background: linear-gradient(180deg, #4a1830, #220812);
+  height: 34px;
+  background: linear-gradient(180deg, #6a2040 0%, #3a1024 45%, #1a0810 100%);
   color: var(--gold);
-  font-size: 18px;
+  font-size: 17px;
+  border: 1.5px solid rgba(240, 193, 75, 0.45);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 200, 230, 0.12),
+    0 2px 0 #0a0206;
+}
+
+.btn-step:hover:not(:disabled) {
+  filter: brightness(1.12);
+  border-color: rgba(240, 193, 75, 0.8);
 }
 
 .btn-bet {
-  min-width: 120px;
-  min-height: 52px;
-  padding: 12px 22px;
-  font-size: 16px;
+  min-width: 110px;
+  min-height: 0;
+  height: 100%;
+  padding: 8px 18px;
+  font-size: 17px;
   font-weight: 700;
   letter-spacing: 0.12em;
   color: #041a0c;
   background: linear-gradient(180deg, #7dffb0 0%, var(--green) 45%, var(--green-deep) 100%);
   box-shadow:
-    0 4px 0 #065c34,
-    0 0 16px rgba(57, 217, 138, 0.45);
+    0 3px 0 #065c34,
+    0 0 14px rgba(57, 217, 138, 0.4);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .btn-bet:hover:not(:disabled) {
   filter: brightness(1.08);
+}
+
+.fairness-footer {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 6px;
+  padding: 2px 2px 0;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.fairness-footer-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+
+.fairness-footer strong {
+  font-weight: 700;
+  color: var(--text);
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
+.fairness-sep {
+  opacity: 0.45;
+}
+
+.fairness-seed {
+  max-width: 42vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fairness-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.95em;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.fairness-open-btn {
+  appearance: none;
+  flex: 0 0 auto;
+  border: 1px solid rgba(196, 120, 255, 0.35);
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--gold);
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.fairness-open-btn:hover {
+  border-color: rgba(240, 193, 75, 0.55);
+  filter: brightness(1.08);
+}
+
+.fairness-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.72);
+  padding: 16px;
+}
+
+.fairness-card {
+  width: min(100%, 420px);
+  max-height: min(90vh, 560px);
+  overflow: auto;
+  padding: 20px 18px;
+  border-radius: 14px;
+  border: 2px solid rgba(196, 120, 255, 0.45);
+  background: linear-gradient(180deg, #2a1438, #12081c);
+  box-shadow: 0 0 28px rgba(100, 60, 180, 0.35);
+}
+
+.fairness-card h2 {
+  margin: 0 0 8px;
+  font-family: Cinzel, serif;
+  color: var(--gold);
+  letter-spacing: 0.08em;
+  font-size: 18px;
+}
+
+.fairness-lead {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
+.fairness-list {
+  margin: 0 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fairness-row {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.fairness-row dt {
+  margin: 0;
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.fairness-row dd {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.fairness-copy {
+  appearance: none;
+  flex: 0 0 auto;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.fairness-copy:hover {
+  border-color: rgba(240, 193, 75, 0.45);
 }
 
 .result-modal {
@@ -614,36 +985,51 @@ body {
   margin-bottom: 16px !important;
 }
 
-@media (max-width: 860px) {
-  /* Fit whole UI in one viewport — no scroll; maximize play area */
+/* Narrow game stage (phone iframe / small GameStage) — NOT @media viewport.
+   In TriBet the iframe CSS viewport can report desktop width while the
+   element is ~360px, which left desktop left-padding (240px+) crushing the board. */
+@container mage-keno (max-width: 860px) {
+  /* Fit whole UI in the iframe box — no scroll; maximize play area */
   .app-shell {
-    height: 100dvh;
-    max-height: 100dvh;
-    min-height: 100dvh;
+    height: 100%;
+    max-height: 100%;
+    min-height: 0;
     overflow: hidden;
     padding: 2px 3px 3px;
     gap: 0;
+    max-width: none;
   }
 
   .top-bar {
-    margin-bottom: 0;
-    line-height: 1;
+    margin-bottom: 2px;
+    line-height: 1.15;
+    padding: 2px 0 1px;
   }
 
   .brand {
-    gap: 6px;
+    gap: 7px;
   }
 
   .brand-mark {
-    font-size: 12px;
+    font-size: 15px;
   }
 
   .brand h1 {
-    font-size: clamp(13px, 3.6vw, 17px);
+    font-size: clamp(16px, 4.4cqw, 20px);
   }
 
   .tagline {
-    display: none;
+    display: block;
+    margin-top: 2px;
+    font-size: clamp(8.5px, 2.35cqw, 10px);
+    letter-spacing: 0.015em;
+    line-height: 1.2;
+    color: #f6d6e6;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    padding: 0 2px;
   }
 
   .stage {
@@ -663,57 +1049,60 @@ body {
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
-    border-width: 2px;
     border-radius: 10px 10px 0 0;
   }
 
   .payout-panel {
     flex: 0 0 auto;
-    flex-wrap: nowrap;
-    align-items: stretch;
-    padding: 4px 6px;
+    grid-template-columns: 64px minmax(0, 1fr);
+    align-items: center;
+    padding: 6px 8px;
     gap: 6px;
-    overflow-x: visible;
-    border-width: 1px;
+    overflow: hidden;
+    border-width: 2px;
+    min-height: 52px;
   }
 
   .payout-label {
-    font-size: 8px;
-    white-space: nowrap;
-    min-width: 0;
-    justify-content: center;
+    width: 64px;
+    min-width: 64px;
+    max-width: 64px;
   }
 
   .payout-title {
     font-size: 11px;
+    letter-spacing: 0.08em;
   }
 
   .payout-sub {
     display: block;
-    font-size: 8px;
+    font-size: 11px;
+    white-space: nowrap;
+    max-width: none;
+    line-height: 1.1;
   }
 
   .payout-table {
-    gap: 3px;
+    gap: 4px;
   }
 
   .payout-table-line {
-    gap: 4px;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 3px;
   }
 
   .payout-row {
     min-width: 0;
-    flex: 1 1 0;
-    padding: 3px 2px;
-    border-radius: 5px;
+    padding: 4px 1px;
+    border-radius: 6px;
   }
 
   .payout-hit {
-    font-size: 8px;
+    font-size: 11px;
   }
 
   .payout-mult {
-    font-size: 10px;
+    font-size: 15px;
   }
 
   .mage-canvas-wrap {
@@ -725,11 +1114,11 @@ body {
 
   .grid-panel {
     position: relative;
-    z-index: 1;
+    z-index: 4;
     flex: 0 0 auto;
     width: 100%;
     min-height: 0;
-    padding: 0 6px 6px;
+    padding: 0 4px 4px;
     justify-content: center;
     align-items: flex-end;
   }
@@ -740,16 +1129,16 @@ body {
     margin: 0;
   }
 
-  /* True circles: width-driven 8×5 board (frees vertical room for mage) */
+  /* Tighter board so the mage band above gets more room */
   .keno-grid {
     grid-template-columns: repeat(8, minmax(0, 1fr));
     aspect-ratio: 8 / 5;
     width: 100%;
     height: auto;
     max-width: 100%;
-    max-height: 100%;
+    max-height: min(35cqh, 100%);
     margin: 0 auto;
-    gap: 4px;
+    gap: 3px;
   }
 
   .keno-ball {
@@ -761,85 +1150,211 @@ body {
   }
 
   .keno-ball-face {
-    font-size: clamp(12px, 3.6vw, 16px);
+    font-size: clamp(20px, 6cqw, 28px);
   }
 
-  /* Balance · Picks · Bet USD on one row; actions below */
+  /* Balance · Picks · Bet USD on one row; actions below — same visual weight as payouts */
   .bet-bar {
     flex-direction: column;
     align-items: stretch;
-    gap: 4px;
-    padding: 4px 6px;
+    gap: 6px;
+    padding: 7px 8px;
+    min-height: 0;
   }
 
   .bet-row-stats {
     width: 100%;
-    gap: 4px;
+    gap: 6px;
   }
 
   .meta-pill {
     flex: 1 1 0;
     min-width: 0;
-    padding: 4px 5px;
-    gap: 1px;
+    padding: 6px 7px;
+    gap: 2px;
   }
 
   .meta-label {
-    font-size: 8px;
+    font-size: 11px;
   }
 
   .meta-value {
-    font-size: 11px;
+    font-size: 15px;
   }
 
   .bet-amount {
     flex: 1.4 1 0;
     min-width: 0;
-    gap: 1px;
+    gap: 2px;
+    padding: 6px 7px;
   }
 
   .bet-stepper {
-    grid-template-columns: 30px 1fr 30px;
-    gap: 3px;
+    grid-template-columns: 32px 1fr 32px;
+    gap: 4px;
   }
 
   .bet-stepper input {
-    font-size: 13px;
+    font-size: 16px;
     padding: 5px 3px;
   }
 
   .btn-step {
-    height: 30px;
-    font-size: 15px;
+    height: 32px;
+    font-size: 18px;
   }
 
   .bet-row-actions {
     width: 100%;
     display: grid;
     grid-template-columns: 1fr 1fr 1.35fr;
-    gap: 4px;
+    gap: 6px;
+    min-height: 40px;
   }
 
   .btn-secondary {
-    padding: 7px 4px;
-    font-size: 10px;
+    padding: 8px 6px;
+    font-size: 13px;
   }
 
   .btn-bet {
     min-width: 0;
-    min-height: 36px;
+    min-height: 40px;
+    height: auto;
     width: 100%;
-    padding: 7px 8px;
-    font-size: 13px;
+    padding: 8px 10px;
+    font-size: 16px;
+  }
+
+  .fairness-footer {
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 6px 8px;
+    font-size: 9px;
+    margin-top: 4px;
+  }
+
+  .fairness-footer-main {
+    justify-content: center;
+  }
+
+  .fairness-seed {
+    max-width: 56vw;
   }
 }
 
-@media (max-width: 520px) {
+/* TriBet iframe on a phone: compress vertical chrome so the whole game
+   fits the GameStage without scrolling the lobby page. */
+@container mage-keno (max-width: 860px) {
+  .app-shell.is-embedded .tagline {
+    display: none;
+  }
+
+  .app-shell.is-embedded .top-bar {
+    margin-bottom: 0;
+    padding: 0;
+  }
+
+  .app-shell.is-embedded .brand h1 {
+    font-size: clamp(13px, 3.8cqw, 17px);
+  }
+
+  .app-shell.is-embedded .brand-mark {
+    font-size: 12px;
+  }
+
+  .app-shell.is-embedded .keno-grid {
+    max-height: min(26cqh, 100%);
+    gap: 2px;
+  }
+
+  .app-shell.is-embedded .payout-panel {
+    min-height: 40px;
+    padding: 3px 6px;
+    gap: 4px;
+  }
+
+  .app-shell.is-embedded .payout-title {
+    font-size: 9px;
+  }
+
+  .app-shell.is-embedded .payout-sub {
+    display: none;
+  }
+
+  .app-shell.is-embedded .payout-hit {
+    font-size: 11px;
+  }
+
+  .app-shell.is-embedded .payout-mult {
+    font-size: 14px;
+  }
+
+  .app-shell.is-embedded .payout-row {
+    padding: 2px 1px;
+  }
+
+  .app-shell.is-embedded .bet-bar {
+    padding: 4px 6px;
+    gap: 4px;
+  }
+
+  .app-shell.is-embedded .meta-pill,
+  .app-shell.is-embedded .bet-amount {
+    padding: 4px 5px;
+  }
+
+  .app-shell.is-embedded .meta-value {
+    font-size: 14px;
+  }
+
+  .app-shell.is-embedded .btn-step {
+    height: 28px;
+    font-size: 16px;
+  }
+
+  .app-shell.is-embedded .bet-row-actions {
+    min-height: 34px;
+    gap: 4px;
+  }
+
+  .app-shell.is-embedded .btn-secondary {
+    padding: 5px 4px;
+    font-size: 12px;
+  }
+
+  .app-shell.is-embedded .btn-bet {
+    min-height: 34px;
+    padding: 6px 8px;
+    font-size: 15px;
+  }
+}
+
+@container mage-keno (max-width: 520px) {
   .keno-grid {
     gap: 3px;
   }
 
   .keno-ball-face {
-    font-size: clamp(11px, 3.8vw, 15px);
+    font-size: clamp(18px, 6.2cqw, 24px);
+  }
+}
+
+/* Platform standard §20 — reduced / instant motion inside GameStage */
+@media (prefers-reduced-motion: reduce) {
+  .hit-flash,
+  .is-hit-impact,
+  .keno-ball.is-miss,
+  .keno-ball.is-hit,
+  .keno-ball-inner,
+  .btn-bet,
+  .btn-secondary,
+  .result-banner {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .keno-ball-inner {
+    transform: none !important;
   }
 }

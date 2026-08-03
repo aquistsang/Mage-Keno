@@ -9,6 +9,10 @@ export type ChromaKeyOpts = {
   /** 0–1 strength of green spill removal on remaining pixels. */
   despill?: number;
   maxKeyWidth?: number;
+  /** Extra dilate passes for edge flood (cast impact frames need more). */
+  expandPasses?: number;
+  /** Extra cleanup around fire / holes — use during cast slam. */
+  aggressive?: boolean;
 };
 
 function colorDist(r: number, g: number, b: number, keyR: number, keyG: number, keyB: number): number {
@@ -38,18 +42,22 @@ function isCharacterTone(r: number, g: number, b: number): boolean {
 /**
  * Unmistakable greenscreen pixel (high G, low R & B).
  * Safe to remove even when not edge-connected — blue outfits never match this.
- * Slightly loose to catch green trapped around staff flame.
+ * Slightly loose to catch green trapped around staff flame / impact frames.
  */
 function isPureScreenGreen(r: number, g: number, b: number): boolean {
   if (isCharacterTone(r, g, b) || isFireTone(r, g, b)) return false;
-  return g >= 120 && r <= 110 && b <= 100 && g >= r + 35 && g >= b + 35;
+  // Classic neon key
+  if (g >= 115 && r <= 115 && b <= 105 && g >= r + 30 && g >= b + 30) return true;
+  // Slightly warmer / darker key leftovers (impact frames)
+  if (g >= 95 && g >= r + 25 && g >= b + 28 && r < 145 && b < 120) return true;
+  return false;
 }
 
 /** Softer spill / near-key green used only for edge flood membership. */
 function isSpillGreen(r: number, g: number, b: number): boolean {
   if (isCharacterTone(r, g, b) || isFireTone(r, g, b)) return false;
   if (isPureScreenGreen(r, g, b)) return true;
-  return g >= 110 && g > r + 22 && g > b + 22 && r < 140 && b < 125;
+  return g >= 100 && g > r + 18 && g > b + 18 && r < 155 && b < 135;
 }
 
 /**
@@ -64,6 +72,8 @@ export function chromaKeyClean(
   similarity = 0.46,
   blend = 0.05,
   despill = 0.85,
+  expandPasses = 3,
+  aggressive = false,
 ): void {
   const { data, width, height } = imageData;
   const maxDist = similarity * 255 * Math.SQRT2;
@@ -124,7 +134,8 @@ export function chromaKeyClean(
 
   // Expand edge-keyed mask into adjacent key greens (staff/fire pockets)
   let remove = visited;
-  for (let pass = 0; pass < 3; pass++) {
+  const passes = Math.max(1, expandPasses);
+  for (let pass = 0; pass < passes; pass++) {
     const next = new Uint8Array(remove);
     for (let y = 1; y < height - 1; y++) {
       for (let x = 1; x < width - 1; x++) {
@@ -172,8 +183,9 @@ export function chromaKeyClean(
   }
 
   // Kill green stuck next to fire (staff flame halo) without touching blue outfit
-  for (let y = 1; y < height - 1; y++) {
-    for (let x = 1; x < width - 1; x++) {
+  const fireRadius = aggressive ? 2 : 1;
+  for (let y = fireRadius; y < height - fireRadius; y++) {
+    for (let x = fireRadius; x < width - fireRadius; x++) {
       const i = y * width + x;
       const p = i * 4;
       if (data[p + 3] < 8) continue;
@@ -181,27 +193,48 @@ export function chromaKeyClean(
       const g = data[p + 1];
       const b = data[p + 2];
       if (isCharacterTone(r, g, b) || isFireTone(r, g, b)) continue;
-      if (!(g > r + 18 && g > b + 18 && g >= 100)) continue;
+      const greenish = g > r + (aggressive ? 12 : 18) && g > b + (aggressive ? 12 : 18) && g >= (aggressive ? 85 : 100);
+      if (!greenish) continue;
 
-      const neigh = [
-        i - 1,
-        i + 1,
-        i - width,
-        i + width,
-        i - width - 1,
-        i - width + 1,
-        i + width - 1,
-        i + width + 1,
-      ];
       let nearFire = false;
       let nearHole = false;
-      for (const ni of neigh) {
-        const np = ni * 4;
-        if (data[np + 3] < 20) nearHole = true;
-        if (isFireTone(data[np], data[np + 1], data[np + 2])) nearFire = true;
+      for (let dy = -fireRadius; dy <= fireRadius; dy++) {
+        for (let dx = -fireRadius; dx <= fireRadius; dx++) {
+          if (dx === 0 && dy === 0) continue;
+          const ni = (y + dy) * width + (x + dx);
+          const np = ni * 4;
+          if (data[np + 3] < 20) nearHole = true;
+          if (isFireTone(data[np], data[np + 1], data[np + 2])) nearFire = true;
+        }
       }
-      if (nearFire || (nearHole && isSpillGreen(r, g, b))) {
+      if (nearFire || (nearHole && (aggressive || isSpillGreen(r, g, b)))) {
         data[p + 3] = 0;
+      }
+    }
+  }
+
+  // Aggressive cast: second pass — any leftover pure/spill green next to keyed alpha
+  if (aggressive) {
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const i = y * width + x;
+        const p = i * 4;
+        if (data[p + 3] < 8) continue;
+        const r = data[p];
+        const g = data[p + 1];
+        const b = data[p + 2];
+        if (isCharacterTone(r, g, b) || isFireTone(r, g, b)) continue;
+        if (!(isPureScreenGreen(r, g, b) || isSpillGreen(r, g, b))) continue;
+        const nearHole =
+          data[p - 4 + 3] < 24 ||
+          data[p + 4 + 3] < 24 ||
+          data[p - width * 4 + 3] < 24 ||
+          data[p + width * 4 + 3] < 24 ||
+          data[p - width * 4 - 4 + 3] < 24 ||
+          data[p - width * 4 + 4 + 3] < 24 ||
+          data[p + width * 4 - 4 + 3] < 24 ||
+          data[p + width * 4 + 4 + 3] < 24;
+        if (nearHole) data[p + 3] = 0;
       }
     }
   }
@@ -273,6 +306,8 @@ export function drawChromaKeyedFrame(
     opts?.similarity ?? 0.46,
     opts?.blend ?? 0.05,
     opts?.despill ?? 0.85,
+    opts?.expandPasses ?? 3,
+    opts?.aggressive ?? false,
   );
   octx.putImageData(frame, 0, 0);
   ctx.drawImage(offscreen, 0, 0, w, h, dx, dy, dw, dh);

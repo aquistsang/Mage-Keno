@@ -12,8 +12,6 @@ type Props = {
   gridRef: RefObject<HTMLDivElement | null>;
   selected: Set<number>;
   activeDraw: { id: number; numbers: number[] } | null;
-  /** True after the staff-impact overlay finishes (or is skipped). */
-  impactComplete: boolean;
   onStaffHit: () => void;
   onFireballImpact: (n: number) => void;
   onSequenceComplete: () => void;
@@ -27,18 +25,27 @@ const MAGE_CAST_SRC = './assets/mage-cast.mp4';
 const MAGE_IMG_SRC = './assets/mage.png';
 /** Whoosh SFX per revealed number */
 const FIREBALL_WHOOSH_SRC = './assets/fireball-whoosh.mp3';
+/** Spell cast ambience (audio only) under the cast animation */
+const CAST_SPELL_SFX_SRC = './assets/cast-spell.mp3';
+/** Goblin grunt when a pick is knocked out (hit) */
+const GOBLIN_HIT_SFX_SRC = './assets/goblin-hit.mp3';
 
 const REVEAL_INTERVAL_MS = 280;
-/** Staff strikes the ground in mage-cast.mp4 around this timestamp. */
+/** Cast clip speed-up (1 = normal). */
+const CAST_PLAYBACK_RATE = 2.55;
+/** Drop this many seconds off the end of mage-cast before the firestorm. */
+const CAST_TRIM_END_SEC = 0.8;
+/** Source-time in mage-cast.mp4 when the staff hits the ground. */
 const CAST_STAFF_HIT_SEC = 2.9;
-/** Keep playing cast this long after the hit before the impact overlay. */
-const CAST_AFTER_HIT_HOLD_SEC = 1;
+/** Time in cast-spell.mp3 of the ground-impact transient. */
+const CAST_SFX_GROUND_HIT_SEC = 1.46;
+/** Fine nudge (sec): positive = delay SFX impact vs staff; negative = earlier. */
+const CAST_SFX_SYNC_NUDGE_SEC = 0;
 
 export function MageCanvas({
   gridRef,
   selected,
   activeDraw,
-  impactComplete,
   onStaffHit,
   onFireballImpact,
   onSequenceComplete,
@@ -55,8 +62,10 @@ export function MageCanvas({
   const castingRef = useRef(false);
   const castDoneRef = useRef(true);
   const staffHitRef = useRef(false);
-  const waitingImpactRef = useRef(false);
   const whooshRef = useRef<HTMLAudioElement | null>(null);
+  const castSfxRef = useRef<HTMLAudioElement | null>(null);
+  const castSfxDelayRef = useRef<number | null>(null);
+  const goblinHitRef = useRef<HTMLAudioElement | null>(null);
   const particlesRef = useRef<Particle[]>([]);
   const queueRef = useRef<number[]>([]);
   const runningRef = useRef(false);
@@ -65,7 +74,6 @@ export function MageCanvas({
   const flashRef = useRef(0);
   const lastDrawIdRef = useRef<number | null>(null);
   const callbacksRef = useRef({ onFireballImpact, onSequenceComplete, onStaffHit });
-  const impactCompleteRef = useRef(impactComplete);
 
   useEffect(() => {
     selectedRef.current = selected;
@@ -76,15 +84,6 @@ export function MageCanvas({
   }, [onFireballImpact, onSequenceComplete, onStaffHit]);
 
   useEffect(() => {
-    impactCompleteRef.current = impactComplete;
-    // Impact overlay finished — allow number reveals to begin
-    if (impactComplete && waitingImpactRef.current && !castDoneRef.current) {
-      waitingImpactRef.current = false;
-      castDoneRef.current = true;
-    }
-  }, [impactComplete]);
-
-  useEffect(() => {
     chromaOffscreenRef.current = document.createElement('canvas');
     lastMageFrameRef.current = document.createElement('canvas');
 
@@ -92,6 +91,16 @@ export function MageCanvas({
     whoosh.preload = 'auto';
     whoosh.volume = 0.7;
     whooshRef.current = whoosh;
+
+    const goblinHit = new Audio(GOBLIN_HIT_SFX_SRC);
+    goblinHit.preload = 'auto';
+    goblinHit.volume = 0.9;
+    goblinHitRef.current = goblinHit;
+
+    const castSfx = new Audio(CAST_SPELL_SFX_SRC);
+    castSfx.preload = 'auto';
+    castSfx.volume = 0.85;
+    castSfxRef.current = castSfx;
 
     const makeVideo = (src: string, loopManual: boolean) => {
       const video = document.createElement('video');
@@ -175,6 +184,14 @@ export function MageCanvas({
         whoosh.pause();
         whoosh.currentTime = 0;
       }).catch(() => {});
+      goblinHit.play().then(() => {
+        goblinHit.pause();
+        goblinHit.currentTime = 0;
+      }).catch(() => {});
+      castSfx.play().then(() => {
+        castSfx.pause();
+        castSfx.currentTime = 0;
+      }).catch(() => {});
     };
     window.addEventListener('pointerdown', unlock, { once: true });
     window.addEventListener('keydown', unlock, { once: true });
@@ -194,6 +211,14 @@ export function MageCanvas({
       activeVideoRef.current = null;
       whoosh.pause();
       whooshRef.current = null;
+      goblinHit.pause();
+      goblinHitRef.current = null;
+      castSfx.pause();
+      castSfxRef.current = null;
+      if (castSfxDelayRef.current != null) {
+        window.clearTimeout(castSfxDelayRef.current);
+        castSfxDelayRef.current = null;
+      }
     };
   }, []);
 
@@ -237,60 +262,119 @@ export function MageCanvas({
     return (gRect.bottom - cRect.top) * scaleY;
   };
 
+  /** Cloud platform top (deck) + horizontal center in canvas pixels. */
+  const getCloudPlatform = (): { deckY: number; centerX: number; cloudH: number } | null => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const cloud = canvas.parentElement?.querySelector('.mage-cloud') as HTMLElement | null;
+    if (!cloud) return null;
+    const cRect = canvas.getBoundingClientRect();
+    const q = cloud.getBoundingClientRect();
+    if (cRect.height <= 0 || q.height <= 0) return null;
+    const scaleX = canvas.width / cRect.width;
+    const scaleY = canvas.height / cRect.height;
+    const cloudH = q.height * scaleY;
+    // Feet bury into the cloud (~55% down) so the platform reads underfoot
+    const deckY = (q.top - cRect.top) * scaleY + cloudH * 0.55;
+    const centerX = (q.left + q.width / 2 - cRect.left) * scaleX;
+    return { deckY, centerX, cloudH };
+  };
+
   const startCastPlayback = () => {
     const idle = idleVideoRef.current;
     const cast = castVideoRef.current;
     if (!cast) {
       // No cast clip — jump straight to impact/reveal pipeline
       staffHitRef.current = true;
-      waitingImpactRef.current = true;
+      castDoneRef.current = true;
       callbacksRef.current.onStaffHit();
       return;
     }
     castingRef.current = true;
     castDoneRef.current = false;
     staffHitRef.current = false;
-    waitingImpactRef.current = false;
     videoSeekingRef.current = false;
     idle?.pause();
     cast.loop = false;
+    cast.playbackRate = CAST_PLAYBACK_RATE;
     cast.currentTime = 0;
     activeVideoRef.current = cast;
 
-    let hitHandled = false;
-    const cutAt = CAST_STAFF_HIT_SEC + CAST_AFTER_HIT_HOLD_SEC;
+    // Spell SFX under the cast — offset so ground hit lines up with staff slam
+    const castSfx = castSfxRef.current;
+    if (castSfxDelayRef.current != null) {
+      window.clearTimeout(castSfxDelayRef.current);
+      castSfxDelayRef.current = null;
+    }
+    if (castSfx) {
+      try {
+        castSfx.pause();
+      } catch {
+        /* ignore */
+      }
+      const wallToStaffHit =
+        CAST_STAFF_HIT_SEC / CAST_PLAYBACK_RATE + CAST_SFX_SYNC_NUDGE_SEC;
+      const sfxAtCastStart = CAST_SFX_GROUND_HIT_SEC - wallToStaffHit;
+      const startSfx = (fromSec: number) => {
+        try {
+          castSfx.currentTime = Math.max(0, fromSec);
+        } catch {
+          /* ignore */
+        }
+        castSfx.play().catch(() => {});
+      };
+      if (sfxAtCastStart >= 0) {
+        // Skip early SFX so its impact lands when the staff hits
+        startSfx(sfxAtCastStart);
+      } else {
+        // Staff hit is later than the SFX impact — delay audio start
+        castSfxDelayRef.current = window.setTimeout(() => {
+          castSfxDelayRef.current = null;
+          startSfx(0);
+        }, -sfxAtCastStart * 1000);
+      }
+    }
 
-    const handleStaffHit = () => {
-      if (hitHandled) return;
-      hitHandled = true;
+    let finished = false;
+
+    const finishCast = () => {
+      if (finished) return;
+      finished = true;
       staffHitRef.current = true;
       cast.removeEventListener('ended', onEnded);
       cast.removeEventListener('timeupdate', onTimeUpdate);
       cast.pause();
       castingRef.current = false;
+      // Resume idle under the firestorm so there's no frozen staff pose
       if (idle) {
+        idle.playbackRate = 1;
         activeVideoRef.current = idle;
         idle.play().catch(() => {});
       }
-      // Hold reveals until impact overlay finishes
-      waitingImpactRef.current = true;
-      castDoneRef.current = false;
+      // Start rainstorm + number reveals together
+      castDoneRef.current = true;
       callbacksRef.current.onStaffHit();
     };
 
     const onTimeUpdate = () => {
-      if (cast.currentTime >= cutAt) handleStaffHit();
+      // Cut the trailing beat, then start the firestorm immediately
+      if (
+        Number.isFinite(cast.duration) &&
+        cast.duration > CAST_TRIM_END_SEC + 0.25 &&
+        cast.currentTime >= cast.duration - CAST_TRIM_END_SEC
+      ) {
+        finishCast();
+      }
     };
 
     const onEnded = () => {
-      // Fallback if staff-hit timestamp was missed
-      handleStaffHit();
+      finishCast();
     };
 
     cast.addEventListener('timeupdate', onTimeUpdate);
     cast.addEventListener('ended', onEnded);
     cast.play().catch(() => {
-      handleStaffHit();
+      finishCast();
     });
   };
 
@@ -300,7 +384,21 @@ export function MageCanvas({
     castingRef.current = false;
     castDoneRef.current = true;
     cast?.pause();
+    if (castSfxDelayRef.current != null) {
+      window.clearTimeout(castSfxDelayRef.current);
+      castSfxDelayRef.current = null;
+    }
+    const castSfx = castSfxRef.current;
+    if (castSfx) {
+      castSfx.pause();
+      try {
+        castSfx.currentTime = 0;
+      } catch {
+        /* ignore */
+      }
+    }
     if (idle) {
+      idle.playbackRate = 1;
       activeVideoRef.current = idle;
       idle.play().catch(() => {});
     }
@@ -310,7 +408,6 @@ export function MageCanvas({
     if (!activeDraw) {
       lastDrawIdRef.current = null;
       staffHitRef.current = false;
-      waitingImpactRef.current = false;
       return;
     }
     if (lastDrawIdRef.current === activeDraw.id && runningRef.current) return;
@@ -320,7 +417,6 @@ export function MageCanvas({
     finishedRef.current = false;
     castDoneRef.current = false;
     staffHitRef.current = false;
-    waitingImpactRef.current = false;
     particlesRef.current = [];
     startCastPlayback();
   }, [activeDraw]);
@@ -367,6 +463,19 @@ export function MageCanvas({
       }
     };
 
+    const playGoblinHit = () => {
+      const master = goblinHitRef.current;
+      if (!master) return;
+      try {
+        const shot = master.cloneNode(true) as HTMLAudioElement;
+        shot.volume = master.volume;
+        void shot.play().catch(() => {});
+      } catch {
+        master.currentTime = 0;
+        void master.play().catch(() => {});
+      }
+    };
+
     const revealNext = () => {
       const next = queueRef.current.shift();
       if (next == null) {
@@ -375,6 +484,7 @@ export function MageCanvas({
       }
       playWhoosh();
       const hit = selectedRef.current.has(next);
+      if (hit) playGoblinHit();
       const at = getBallCenter(next);
       callbacksRef.current.onFireballImpact(next);
       if (at) {
@@ -443,6 +553,7 @@ export function MageCanvas({
       const wrapEl = wrapRef.current;
       const wrapW = wrapEl?.clientWidth ?? canvas.width;
       const portrait = wrapW < 860;
+      const platform = getCloudPlatform();
 
       let mageW: number;
       let mageH: number;
@@ -450,33 +561,78 @@ export function MageCanvas({
       let mageY: number;
 
       if (portrait) {
-        // Fill all space above the number grid — no dead gap
+        // Fill the band above the numbers, but land feet on the cloud deck.
         const gridTop = getGridTop();
-        const bandH = Math.max(gridTop - 6, canvas.height * 0.45);
-        const boxW = canvas.width * 0.99;
-        const boxH = bandH * 0.99;
-        const scale =
-          srcW > 0 && srcH > 0 ? Math.min(boxW / srcW, boxH / srcH) : 1;
-        mageW = srcW > 0 ? srcW * scale : boxW;
-        mageH = srcH > 0 ? srcH * scale : boxH;
-        mageX = (canvas.width - mageW) / 2;
-        mageY = Math.max(0, bandH - mageH);
+        const padTop = Math.max(6, canvas.height * 0.01);
+        const footTarget = platform
+          ? Math.min(platform.deckY, gridTop - 8)
+          : Math.max(padTop + 80, gridTop - 2);
+        const bandH = Math.max(80, footTarget - padTop);
+        // Slightly smaller than full-band so the cloud pedestal reads underfoot
+        const scale = srcH > 0 ? (bandH / srcH) * (platform ? 1.05 : 1.212) : 1;
+        mageW = srcW > 0 ? srcW * scale : canvas.width;
+        mageH = srcH > 0 ? srcH * scale : bandH;
+        mageX = platform
+          ? platform.centerX - mageW / 2
+          : (canvas.width - mageW) / 2;
+        mageY = footTarget - mageH;
+        // Keep hat mostly in frame if the cloud sits low
+        if (mageY < padTop - mageH * 0.18) mageY = padTop - mageH * 0.18;
+        // Nudge down toward the number board (mobile only)
+        {
+          const cssH = wrapEl?.clientHeight || canvas.height;
+          const cmY = (96 / 2.54) * (canvas.height / Math.max(1, cssH));
+          mageY += cmY; // 1cm down
+        }
       } else {
-        // Desktop: large mage on the left edge of the frame
-        const boxW = canvas.width * 0.42;
-        const boxH = canvas.height * 0.98;
+        // Desktop: mage in the left column, clear of the number board
+        const colW = canvas.width * 0.44;
+        const boxW = colW * (platform ? 0.78 : 0.95);
+        const boxH = canvas.height * (platform ? 0.78 : 0.98);
         const scale =
-          srcW > 0 && srcH > 0 ? Math.min(boxW / srcW, boxH / srcH) : 1;
+          (srcW > 0 && srcH > 0 ? Math.min(boxW / srcW, boxH / srcH) : 1) *
+          (platform ? 1.02 : 1.15);
         mageW = srcW > 0 ? srcW * scale : boxW;
         mageH = srcH > 0 ? srcH * scale : boxH;
-        mageX = canvas.width * 0.012;
-        const gridBottom = getGridBottom();
-        mageY = Math.max(4, (gridBottom || canvas.height * 0.98) - mageH);
+        mageX = platform
+          ? platform.centerX - mageW / 2
+          : (colW - mageW) / 2;
+        if (platform) {
+          mageY = platform.deckY - mageH;
+          if (mageY < 4) mageY = 4;
+        } else {
+          const gridBottom = getGridBottom();
+          const cssH = wrapEl?.clientHeight || canvas.height;
+          const pxPerCss = canvas.height / Math.max(1, cssH);
+          const oneCm = (96 / 2.54) * pxPerCss;
+          const lift =
+            Math.max(48, canvas.height * 0.06) + canvas.height * 0.1 + oneCm;
+          mageY = Math.max(4, (gridBottom || canvas.height * 0.98) - mageH - lift);
+        }
+        // Nudge away from the number board (desktop only)
+        {
+          const cssW = wrapEl?.clientWidth || canvas.width;
+          const cssH = wrapEl?.clientHeight || canvas.height;
+          const cmX = (96 / 2.54) * (canvas.width / Math.max(1, cssW));
+          const cmY = (96 / 2.54) * (canvas.height / Math.max(1, cssH));
+          mageX -= cmX; // 1cm left
+          mageY -= cmY; // 1cm up
+        }
       }
 
       // Cast clip is brighter green; idle uses similar key
+      // Cast slam needs aggressive keying — green pockets around staff/fire
       const key = castingRef.current
-        ? { keyR: 22, keyG: 223, keyB: 13 }
+        ? {
+            keyR: 20,
+            keyG: 220,
+            keyB: 12,
+            similarity: 0.58,
+            blend: 0.04,
+            despill: 0.92,
+            expandPasses: 6,
+            aggressive: true,
+          }
         : { keyR: 25, keyG: 225, keyB: 13 };
 
       if (source && off && srcW > 0 && keyLive) {
@@ -534,39 +690,27 @@ export function MageCanvas({
         ctx.fillRect(0, 0, canvas.width, canvas.height);
       }
 
-      // Staff-hit + hold fallback if timeupdate is sparse
+      // Cast trimmed end — start firestorm + reveals together
       if (castingRef.current && !staffHitRef.current) {
         const cast = castVideoRef.current;
         const idle = idleVideoRef.current;
-        const cutAt = CAST_STAFF_HIT_SEC + CAST_AFTER_HIT_HOLD_SEC;
-        const nearEnd =
+        const trimReady =
           cast &&
           Number.isFinite(cast.duration) &&
-          cast.duration > 0 &&
-          cast.currentTime >= cast.duration - 0.05;
-        const hitNow = cast && cast.currentTime >= cutAt;
-        if (hitNow || nearEnd) {
+          cast.duration > CAST_TRIM_END_SEC + 0.25 &&
+          cast.currentTime >= cast.duration - CAST_TRIM_END_SEC;
+        if (trimReady || (cast && cast.ended)) {
           staffHitRef.current = true;
           cast.pause();
           castingRef.current = false;
           if (idle) {
+            idle.playbackRate = 1;
             activeVideoRef.current = idle;
             idle.play().catch(() => {});
           }
-          waitingImpactRef.current = true;
-          castDoneRef.current = false;
+          castDoneRef.current = true;
           callbacksRef.current.onStaffHit();
         }
-      }
-
-      // Impact overlay finished while we were waiting
-      if (
-        waitingImpactRef.current &&
-        impactCompleteRef.current &&
-        !castDoneRef.current
-      ) {
-        waitingImpactRef.current = false;
-        castDoneRef.current = true;
       }
 
       if (

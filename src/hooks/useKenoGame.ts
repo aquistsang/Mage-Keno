@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { connectBridge, isEmbedded, placeBet } from '../utils/bridge';
+import { Fairness, type FairnessSnapshot } from '../utils/fairness';
 import {
   DEFAULT_BET,
   DRAW_COUNT,
@@ -7,6 +9,8 @@ import {
   MAX_PICKS,
   MIN_BET,
   START_BALANCE,
+  bridgeOutcomesForSpots,
+  drawConsistentWithHits,
   pickRandomNumbers,
   payoutMultiplier,
 } from '../utils/payouts';
@@ -39,6 +43,15 @@ export type UseKenoGameResult = {
   onSequenceComplete: () => void;
   /** Stays set for the full cast so canvas remounts can restart the sequence. */
   activeDraw: { id: number; numbers: number[] } | null;
+  fairness: FairnessSnapshot;
+  shortHash: (value?: string) => string;
+};
+
+type SettledRound = {
+  matches: number;
+  mult: number;
+  win: number;
+  balance: number;
 };
 
 export function useKenoGame(): UseKenoGameResult {
@@ -55,12 +68,24 @@ export function useKenoGame(): UseKenoGameResult {
   const [animatingNumber, setAnimatingNumber] = useState<number | null>(null);
   const [flashHit, setFlashHit] = useState(false);
   const [activeDraw, setActiveDraw] = useState<{ id: number; numbers: number[] } | null>(null);
+  const [fairnessSnap, setFairnessSnap] = useState<FairnessSnapshot>(() => ({
+    serverSeedHash: '—',
+    serverSeed: null,
+    clientSeed: '—',
+    nonce: 0,
+    lastDrawHash: null,
+    hostSettled: false,
+  }));
   const drawIdRef = useRef(0);
+  const fairnessRef = useRef(new Fairness());
 
   const selectedRef = useRef(selected);
   const betRef = useRef(bet);
   const balanceRef = useRef(balance);
   const revealedRef = useRef(revealed);
+  const bridgeActiveRef = useRef(false);
+  const settledRef = useRef<SettledRound | null>(null);
+  const bettingLockRef = useRef(false);
 
   useEffect(() => {
     selectedRef.current = selected;
@@ -75,6 +100,19 @@ export function useKenoGame(): UseKenoGameResult {
     revealedRef.current = revealed;
   }, [revealed]);
 
+  // Class A: announce GameReady; host replies with init { balance }
+  useEffect(() => {
+    void fairnessRef.current.initSession().then(() => {
+      setFairnessSnap(fairnessRef.current.snapshot());
+    });
+    return connectBridge({
+      onInit: (bal) => {
+        bridgeActiveRef.current = true;
+        setBalance(bal);
+      },
+    });
+  }, []);
+
   const setBet = useCallback((n: number) => {
     const v = Math.max(MIN_BET, Math.min(MAX_BET, Math.floor(Number(n)) || MIN_BET));
     setBetState(v);
@@ -87,6 +125,27 @@ export function useKenoGame(): UseKenoGameResult {
     setLastMatches(0);
     setLastMultiplier(0);
   }, []);
+
+  const beginRound = useCallback(
+    (picks: Set<number>, amount: number, draw: number[]) => {
+      setBetState(amount);
+      setPhase('playing');
+      setRevealed([]);
+      setBallState(() => {
+        const m = new Map<number, BallVisualState>();
+        for (const n of picks) m.set(n, 'selected');
+        return m;
+      });
+      setLastWin(0);
+      setLastMatches(0);
+      setLastMultiplier(0);
+      setDrawQueue(draw);
+      setAnimatingNumber(null);
+      drawIdRef.current += 1;
+      setActiveDraw({ id: drawIdRef.current, numbers: draw });
+    },
+    [],
+  );
 
   const toggleNumber = useCallback(
     (n: number) => {
@@ -118,30 +177,54 @@ export function useKenoGame(): UseKenoGameResult {
   }, [phase, resetBoardVisuals]);
 
   const startBet = useCallback(() => {
-    if (phase === 'playing') return;
+    if (phase === 'playing' || bettingLockRef.current) return;
     const picks = selectedRef.current;
     if (picks.size < 1) return;
     const amount = Math.max(MIN_BET, Math.min(MAX_BET, betRef.current));
     if (amount > balanceRef.current) return;
 
-    const draw = pickRandomNumbers(DRAW_COUNT, GRID_SIZE);
-    setBalance((b) => b - amount);
-    setBetState(amount);
-    setPhase('playing');
-    setRevealed([]);
-    setBallState(() => {
-      const m = new Map<number, BallVisualState>();
-      for (const n of picks) m.set(n, 'selected');
-      return m;
-    });
-    setLastWin(0);
-    setLastMatches(0);
-    setLastMultiplier(0);
-    setDrawQueue(draw);
-    setAnimatingNumber(null);
-    drawIdRef.current += 1;
-    setActiveDraw({ id: drawIdRef.current, numbers: draw });
-  }, [phase]);
+    const runLocal = () => {
+      settledRef.current = null;
+      bettingLockRef.current = true;
+      void fairnessRef.current.nextDraw(DRAW_COUNT, GRID_SIZE).then(({ numbers, snapshot }) => {
+        bettingLockRef.current = false;
+        setFairnessSnap(snapshot);
+        setBalance((b) => b - amount);
+        beginRound(picks, amount, numbers);
+      });
+    };
+
+    // Embedded: host owns RNG + balance (bridge). Standalone: local seeded draw.
+    if (bridgeActiveRef.current || isEmbedded()) {
+      bettingLockRef.current = true;
+      const outcomes = bridgeOutcomesForSpots(picks.size);
+      void placeBet(amount, outcomes, {
+        spots: picks.size,
+        picks: [...picks],
+      }).then((res) => {
+        bettingLockRef.current = false;
+        if (res.type === 'rejected') {
+          // Fall back to local if host not ready yet
+          if (res.reason === 'not-embedded') runLocal();
+          return;
+        }
+        bridgeActiveRef.current = true;
+        settledRef.current = {
+          matches: res.outcomeIndex,
+          mult: res.multiplier,
+          win: Math.floor(res.payout),
+          balance: res.balance,
+        };
+        setFairnessSnap(fairnessRef.current.markHostSettled());
+        setBalance(res.balance);
+        const draw = drawConsistentWithHits([...picks], res.outcomeIndex);
+        beginRound(picks, amount, draw);
+      });
+      return;
+    }
+
+    runLocal();
+  }, [phase, beginRound]);
 
   const onFireballImpact = useCallback((n: number) => {
     const isHit = selectedRef.current.has(n);
@@ -164,15 +247,24 @@ export function useKenoGame(): UseKenoGameResult {
   }, []);
 
   const onSequenceComplete = useCallback(() => {
-    const picks = selectedRef.current;
-    const current = revealedRef.current;
-    const matches = current.filter((n) => picks.has(n)).length;
-    const mult = payoutMultiplier(matches, picks.size);
-    const win = Math.floor(betRef.current * mult);
-    setLastMatches(matches);
-    setLastMultiplier(mult);
-    setLastWin(win);
-    if (win > 0) setBalance((b) => b + win);
+    const settled = settledRef.current;
+    if (settled) {
+      setLastMatches(settled.matches);
+      setLastMultiplier(settled.mult);
+      setLastWin(settled.win);
+      setBalance(settled.balance);
+      settledRef.current = null;
+    } else {
+      const picks = selectedRef.current;
+      const current = revealedRef.current;
+      const matches = current.filter((n) => picks.has(n)).length;
+      const mult = payoutMultiplier(matches, picks.size);
+      const win = Math.floor(betRef.current * mult);
+      setLastMatches(matches);
+      setLastMultiplier(mult);
+      setLastWin(win);
+      if (win > 0) setBalance((b) => b + win);
+    }
     setPhase('result');
     setAnimatingNumber(null);
     setActiveDraw(null);
@@ -184,6 +276,11 @@ export function useKenoGame(): UseKenoGameResult {
 
   const canBet =
     phase !== 'playing' && selected.size >= 1 && bet >= MIN_BET && bet <= balance;
+
+  const shortHash = useCallback(
+    (value?: string) => fairnessRef.current.shortHash(value),
+    [],
+  );
 
   return {
     balance,
@@ -208,5 +305,7 @@ export function useKenoGame(): UseKenoGameResult {
     onFireballImpact,
     onSequenceComplete,
     activeDraw,
+    fairness: fairnessSnap,
+    shortHash,
   };
 }

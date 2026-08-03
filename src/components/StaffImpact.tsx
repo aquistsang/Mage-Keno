@@ -2,66 +2,72 @@ import { useEffect, useRef } from 'react';
 
 const IMPACT_WEBM = './assets/staff-impact.webm';
 const IMPACT_MP4 = './assets/staff-impact.mp4';
+/** Play at 2× so wall-clock duration is half of the source clip. */
+const IMPACT_PLAYBACK_RATE = 2;
 
 type Props = {
   active: boolean;
-  onEnded: () => void;
 };
 
-/** Full-bleed firestorm clip that covers the number grid after the staff hit. */
-export function StaffImpact({ active, onEnded }: Props) {
+/** Firestorm behind the mage — loops until the parent deactivates it. */
+export function StaffImpact({ active }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const endedRef = useRef(false);
+
+  // Keep the clip decoded so the first active frame isn't a blank load
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.load();
+  }, []);
 
   useEffect(() => {
-    if (!active) {
-      endedRef.current = false;
-      const v = videoRef.current;
-      if (v) {
-        v.pause();
-        v.currentTime = 0;
-      }
-      return;
-    }
-
-    endedRef.current = false;
     const video = videoRef.current;
     if (!video) return;
 
-    const finish = () => {
-      if (endedRef.current) return;
-      endedRef.current = true;
-      onEnded();
+    if (!active) {
+      video.loop = false;
+      video.pause();
+      try {
+        video.currentTime = 0;
+      } catch {
+        /* ignore seek before ready */
+      }
+      video.playbackRate = 1;
+      return;
+    }
+
+    const start = () => {
+      video.loop = true;
+      video.playbackRate = IMPACT_PLAYBACK_RATE;
+      try {
+        video.currentTime = 0;
+      } catch {
+        /* ignore */
+      }
+      video.play().catch(() => {});
     };
 
-    video.currentTime = 0;
-    video.play().catch(() => finish());
+    if (video.readyState >= 2) start();
+    else video.addEventListener('loadeddata', start, { once: true });
 
     return () => {
+      video.removeEventListener('loadeddata', start);
       video.pause();
     };
-  }, [active, onEnded]);
-
-  if (!active) return null;
+  }, [active]);
 
   return (
-    <div className="staff-impact" aria-hidden="true">
+    <div
+      className={`staff-impact${active ? ' is-active' : ''}`}
+      aria-hidden="true"
+    >
       <video
         ref={videoRef}
         className="staff-impact-video"
         muted
         playsInline
+        loop
         preload="auto"
-        onEnded={() => {
-          if (endedRef.current) return;
-          endedRef.current = true;
-          onEnded();
-        }}
-        onError={() => {
-          if (endedRef.current) return;
-          endedRef.current = true;
-          onEnded();
-        }}
       >
         <source src={IMPACT_WEBM} type="video/webm" />
         <source src={IMPACT_MP4} type="video/mp4" />

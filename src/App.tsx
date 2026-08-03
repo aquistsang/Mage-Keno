@@ -1,65 +1,75 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { BetControls } from './components/BetControls';
+import { FairnessFooter } from './components/FairnessFooter';
 import { KenoGrid } from './components/KenoGrid';
 import { MageCanvas } from './components/MageCanvas';
 import { PayoutTable } from './components/PayoutTable';
 import { StaffImpact } from './components/StaffImpact';
 import { useKenoGame } from './hooks/useKenoGame';
+import { isEmbedded } from './utils/bridge';
 
 export default function App() {
   const game = useKenoGame();
   const gridRef = useRef<HTMLDivElement>(null);
   const [impactPlaying, setImpactPlaying] = useState(false);
-  const [impactComplete, setImpactComplete] = useState(false);
+  const embedded = isEmbedded();
 
-  // Reset impact pipeline for each new bet/draw
+  // Reset storm for each new bet/draw
   useEffect(() => {
     setImpactPlaying(false);
-    setImpactComplete(false);
   }, [game.activeDraw?.id]);
 
   const onStaffHit = useCallback(() => {
-    setImpactComplete(false);
     setImpactPlaying(true);
   }, []);
 
-  const onImpactEnded = useCallback(() => {
+  const onSequenceComplete = useCallback(() => {
     setImpactPlaying(false);
-    setImpactComplete(true);
-  }, []);
+    game.onSequenceComplete();
+  }, [game.onSequenceComplete]);
 
   return (
-    <div className={`app-shell ${game.flashHit ? 'is-flash' : ''}`}>
+    <div
+      className={`app-shell${game.flashHit ? ' is-flash' : ''}${embedded ? ' is-embedded' : ''}`}
+    >
       <header className="top-bar">
         <div className="brand">
           <span className="brand-mark">✦</span>
           <h1>MAGE KENO</h1>
         </div>
-        <p className="tagline">Pick up to 10 · 20 fireballs · Match to win</p>
+        <p className="tagline">
+          Pick up to 10 goblins · 20 fireballs · Match hits to stun them and win
+        </p>
       </header>
 
       <main className="stage">
         <section className="arena">
-          <div className="arena-frame">
+          <div
+            className={`arena-frame${impactPlaying ? ' has-storm' : ''}`}
+            style={{
+              ['--arena-bg-mobile' as string]: "url('./assets/mage-bg.png')",
+              ['--arena-bg-desktop' as string]: "url('./assets/mage-bg-desktop.png')",
+            }}
+          >
+            <StaffImpact active={impactPlaying} />
             <MageCanvas
               gridRef={gridRef}
               selected={game.selected}
               activeDraw={game.activeDraw}
-              impactComplete={impactComplete}
               onStaffHit={onStaffHit}
               onFireballImpact={game.onFireballImpact}
-              onSequenceComplete={game.onSequenceComplete}
+              onSequenceComplete={onSequenceComplete}
             />
-            <div className={`grid-panel${impactPlaying ? ' is-impact' : ''}`}>
+            <div className="grid-panel">
               <div className="keno-grid-slot">
                 <KenoGrid
                   gridRef={gridRef}
                   selected={game.selected}
                   ballState={game.ballState}
+                  animatingNumber={game.animatingNumber}
                   disabled={game.phase === 'playing'}
                   onToggle={game.toggleNumber}
                 />
-                <StaffImpact active={impactPlaying} onEnded={onImpactEnded} />
               </div>
             </div>
           </div>
@@ -79,13 +89,19 @@ export default function App() {
         onBet={game.startBet}
       />
 
+      <FairnessFooter
+        spots={game.selected.size}
+        fairness={game.fairness}
+        shortHash={game.shortHash}
+      />
+
       {game.phase === 'result' && (
         <div className="result-modal" role="dialog" aria-modal="true">
           <div className="result-card">
             <h2>{game.lastWin > 0 ? 'SPELL HIT!' : 'NO MATCH'}</h2>
             <p>
               {game.lastMatches} match{game.lastMatches === 1 ? '' : 'es'} ·{' '}
-              <span className="gold">{game.lastMultiplier.toFixed(1)}x</span>
+              <span className="gold">{game.lastMultiplier.toFixed(1)}×</span>
             </p>
             <p className="result-win">
               {game.lastWin > 0 ? `+$${game.lastWin.toLocaleString()}` : 'Better luck next cast'}
