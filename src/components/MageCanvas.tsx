@@ -580,9 +580,12 @@ export function MageCanvas({
         mageX = platform
           ? platform.centerX - mageW / 2
           : (canvas.width - mageW) / 2;
-        // Up ~1cm vs prior pose (undo the previous +1cm down nudge).
-        mageY = footTarget - mageH;
-        if (mageY < padTop - mageH * 0.04) mageY = padTop - mageH * 0.04;
+        // Nudge up ~1cm toward the ceiling (user POV).
+        const cssH = wrapEl?.clientHeight || canvas.height;
+        const oneCm = (96 / 2.54) * (canvas.height / Math.max(1, cssH));
+        mageY = footTarget - mageH - oneCm;
+        // Allow slight hat crop so the up-nudge isn't clamped away.
+        if (mageY < padTop - mageH * 0.1) mageY = padTop - mageH * 0.1;
       } else {
         // Desktop: mage in the left column, clear of the number board
         const colW = canvas.width * 0.44;
