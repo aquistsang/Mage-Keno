@@ -563,25 +563,37 @@ export function MageCanvas({
       let mageY: number;
 
       if (portrait) {
-        // Mobile: hero-scale mage — fill width and most of the sky above the board.
+        // Mobile: mage in the sky band only — feet ABOVE the numbers, no overlap.
         const gridTop = getGridTop();
-        const padTop = Math.max(2, canvas.height * 0.002);
-        // Feet overlap the number board so the figure reads large vs the coins.
+        const padTop = Math.max(6, canvas.height * 0.01);
+        const gap = Math.max(20, canvas.height * 0.028);
         const footTarget = platform
-          ? Math.min(platform.deckY, gridTop + canvas.height * 0.1)
-          : gridTop + canvas.height * 0.14;
-        const bandH = Math.max(180, footTarget - padTop);
-        const widthScale = srcW > 0 ? (canvas.width * 1.08) / srcW : 1;
-        const heightScale = srcH > 0 ? (bandH / srcH) * 1.55 : 1;
-        const scale = Math.max(widthScale, heightScale) * 1.12;
+          ? Math.min(platform.deckY, gridTop - gap)
+          : Math.max(padTop + 80, gridTop - gap);
+        const bandH = Math.max(80, footTarget - padTop);
+        // Fit the band; sprite has transparent padding so a mild overshoot is OK
+        // but never push feet past the board.
+        const scaleBySky = srcH > 0 ? (bandH / srcH) * (platform ? 1.05 : 1.18) : 1;
+        const scaleByWidth = srcW > 0 ? (canvas.width * 0.92) / srcW : 1;
+        const scale = Math.min(scaleBySky, scaleByWidth);
         mageW = srcW > 0 ? srcW * scale : canvas.width;
         mageH = srcH > 0 ? srcH * scale : bandH;
         mageX = platform
           ? platform.centerX - mageW / 2
           : (canvas.width - mageW) / 2;
         mageY = footTarget - mageH;
-        // Allow slight hat crop so body/staff stay huge in frame
-        if (mageY < padTop - mageH * 0.18) mageY = padTop - mageH * 0.18;
+        if (mageY < padTop) mageY = padTop;
+        // If hat forced us up, shrink so feet still clear the board.
+        if (mageY + mageH > footTarget && srcH > 0) {
+          const maxH = footTarget - mageY;
+          const s2 = maxH / srcH;
+          mageW = srcW * s2;
+          mageH = srcH * s2;
+          mageX = platform
+            ? platform.centerX - mageW / 2
+            : (canvas.width - mageW) / 2;
+          mageY = footTarget - mageH;
+        }
       } else {
         // Desktop: mage in the left column, clear of the number board
         const colW = canvas.width * 0.44;
