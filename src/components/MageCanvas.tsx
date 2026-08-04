@@ -580,12 +580,9 @@ export function MageCanvas({
         mageX = platform
           ? platform.centerX - mageW / 2
           : (canvas.width - mageW) / 2;
-        // Nudge down ~1cm so the hat reads on-screen; feet stay above the board.
-        const cssH = wrapEl?.clientHeight || canvas.height;
-        const oneCm = (96 / 2.54) * (canvas.height / Math.max(1, cssH));
-        mageY = footTarget - mageH + oneCm;
-        if (mageY + mageH > footTarget) mageY = footTarget - mageH;
-        if (mageY < padTop) mageY = padTop;
+        // Up ~1cm vs prior pose (undo the previous +1cm down nudge).
+        mageY = footTarget - mageH;
+        if (mageY < padTop - mageH * 0.04) mageY = padTop - mageH * 0.04;
       } else {
         // Desktop: mage in the left column, clear of the number board
         const colW = canvas.width * 0.44;
