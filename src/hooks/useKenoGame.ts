@@ -86,6 +86,7 @@ export function useKenoGame(): UseKenoGameResult {
   const bridgeActiveRef = useRef(false);
   const settledRef = useRef<SettledRound | null>(null);
   const bettingLockRef = useRef(false);
+  const flashTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     selectedRef.current = selected;
@@ -105,12 +106,19 @@ export function useKenoGame(): UseKenoGameResult {
     void fairnessRef.current.initSession().then(() => {
       setFairnessSnap(fairnessRef.current.snapshot());
     });
-    return connectBridge({
+    const disconnect = connectBridge({
       onInit: (bal) => {
         bridgeActiveRef.current = true;
         setBalance(bal);
       },
     });
+    return () => {
+      disconnect();
+      if (flashTimerRef.current != null) {
+        window.clearTimeout(flashTimerRef.current);
+        flashTimerRef.current = null;
+      }
+    };
   }, []);
 
   const setBet = useCallback((n: number) => {
@@ -242,7 +250,11 @@ export function useKenoGame(): UseKenoGameResult {
     });
     if (isHit) {
       setFlashHit(true);
-      window.setTimeout(() => setFlashHit(false), 180);
+      if (flashTimerRef.current != null) window.clearTimeout(flashTimerRef.current);
+      flashTimerRef.current = window.setTimeout(() => {
+        setFlashHit(false);
+        flashTimerRef.current = null;
+      }, 180);
     }
   }, []);
 

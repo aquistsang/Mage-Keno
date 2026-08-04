@@ -154,30 +154,44 @@ body {
   position: relative;
   border: 2px solid transparent;
   border-radius: 14px 14px 0 0;
-  background-color: #12081c;
-  /* Mobile portrait sky; desktop overrides via container query */
-  background-image: var(--arena-bg-mobile, var(--arena-bg, none));
-  background-size: 100% 100%;
-  background-position: center;
-  background-repeat: no-repeat;
+  background-color: #0a0c1b;
   /* Violet rim + warm sunset wash matching the sky art */
   box-shadow:
     0 0 0 1px rgba(255, 138, 92, 0.35),
     0 0 0 3px rgba(88, 40, 140, 0.85),
     0 0 22px rgba(196, 120, 255, 0.35),
     0 0 40px rgba(255, 100, 60, 0.12),
-    inset 0 0 0 1px rgba(255, 200, 170, 0.18),
-    inset 0 0 28px rgba(20, 4, 40, 0.35);
+    inset 0 0 0 1px rgba(255, 200, 170, 0.18);
   overflow: hidden;
   min-height: 0;
   flex: 0 0 auto;
 }
 
-/* Desktop: wide sky art, stretched to fill the arena */
+/* Night-sky cloud plate — cover + bias up so rim light sits above the board */
+.arena-sky {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 22%;
+  pointer-events: none;
+  user-select: none;
+  z-index: 0;
+}
+
+.arena-sky-desktop {
+  display: none;
+}
+
 @container mage-keno (min-width: 861px) {
-  .arena-frame {
-    background-image: var(--arena-bg-desktop, var(--arena-bg-mobile, none));
-    background-size: 100% 100%;
+  .arena-sky-mobile {
+    display: none;
+  }
+
+  .arena-sky-desktop {
+    display: block;
+    object-position: center 30%;
   }
 }
 
@@ -525,20 +539,29 @@ body {
 
 .payout-table {
   display: flex;
-  flex-direction: column;
-  gap: 5px;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 6px;
   font-family: var(--font-ui);
   font-size: 11px;
   min-width: 0;
   width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(196, 120, 255, 0.45) transparent;
+  padding-bottom: 2px;
 }
 
-.payout-table-line {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 6px;
-  min-width: 0;
-  width: 100%;
+.payout-table::-webkit-scrollbar {
+  height: 4px;
+}
+
+.payout-table::-webkit-scrollbar-thumb {
+  background: rgba(196, 120, 255, 0.4);
+  border-radius: 999px;
 }
 
 .payout-row {
@@ -547,11 +570,12 @@ body {
   align-items: center;
   justify-content: center;
   gap: 3px;
-  padding: 6px 4px;
+  padding: 6px 8px;
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.35);
   border: 1px solid rgba(255, 255, 255, 0.06);
-  min-width: 0;
+  flex: 0 0 auto;
+  min-width: 52px;
 }
 
 .payout-row.is-zero {
@@ -1054,23 +1078,23 @@ body {
 
   .payout-panel {
     flex: 0 0 auto;
-    grid-template-columns: 64px minmax(0, 1fr);
+    grid-template-columns: 56px minmax(0, 1fr);
     align-items: center;
-    padding: 6px 8px;
+    padding: 5px 6px;
     gap: 6px;
     overflow: hidden;
     border-width: 2px;
-    min-height: 52px;
+    min-height: 0;
   }
 
   .payout-label {
-    width: 64px;
-    min-width: 64px;
-    max-width: 64px;
+    width: 56px;
+    min-width: 56px;
+    max-width: 56px;
   }
 
   .payout-title {
-    font-size: 11px;
+    font-size: 10px;
     letter-spacing: 0.08em;
   }
 
@@ -1084,25 +1108,21 @@ body {
 
   .payout-table {
     gap: 4px;
-  }
-
-  .payout-table-line {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 3px;
+    padding-bottom: 1px;
   }
 
   .payout-row {
-    min-width: 0;
-    padding: 4px 1px;
+    min-width: 44px;
+    padding: 4px 6px;
     border-radius: 6px;
   }
 
   .payout-hit {
-    font-size: 11px;
+    font-size: 10px;
   }
 
   .payout-mult {
-    font-size: 15px;
+    font-size: 13px;
   }
 
   .mage-canvas-wrap {
@@ -1136,7 +1156,7 @@ body {
     width: 100%;
     height: auto;
     max-width: 100%;
-    max-height: min(35cqh, 100%);
+    max-height: min(26cqh, 100%);
     margin: 0 auto;
     gap: 3px;
   }
@@ -1291,7 +1311,8 @@ body {
   }
 
   .app-shell.is-embedded .payout-row {
-    padding: 2px 1px;
+    min-width: 40px;
+    padding: 3px 5px;
   }
 
   .app-shell.is-embedded .bet-bar {

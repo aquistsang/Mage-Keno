@@ -20,7 +20,7 @@ Fantasy **40-number Keno** (5×8 grid). Pick up to 10 spots; the mage draws 20 f
 | Host owns settlement RNG when embedded | ✅ weighted hit-count outcomes via bridge `bet` |
 | Declare Game Profile | ✅ `FLEXIBLE` in `src/lib/gameDisplay.js` |
 | No audio before user gesture | ✅ unlock on first pointer/key |
-| Release audio / RAF / listeners on teardown | ✅ canvas/cloud effect cleanups |
+| Release audio / RAF / listeners on teardown | ✅ canvas cleanup + bridge `message` listener removed |
 | Never call Fullscreen API | ✅ none |
 | Respect `prefers-reduced-motion` | ✅ CSS disables hit/miss/flip motion |
 

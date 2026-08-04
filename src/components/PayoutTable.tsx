@@ -7,8 +7,6 @@ type Props = {
 export function PayoutTable({ spots }: Props) {
   const n = spots >= 1 ? spots : 0;
   const rows = payoutRowsForDisplay(spots);
-  const top = rows.filter((r) => r.hits <= 5);
-  const bottom = rows.filter((r) => r.hits > 5);
 
   return (
     <aside className="payout-panel" aria-label="Payout table">
@@ -18,43 +16,24 @@ export function PayoutTable({ spots }: Props) {
           <span className="payout-spots">{n}</span>/{MAX_PICKS} picks
         </span>
       </div>
-      <div className="payout-table">
-        <div className="payout-table-line">
-          {top.map((r) => (
-            <div
-              key={r.hits}
-              className={`payout-row${r.mult <= 0 || !r.possible ? ' is-zero' : ''}`}
-              title={
-                r.possible
-                  ? `${r.hits} hit${r.hits === 1 ? '' : 's'} → ${formatMult(r.mult)}`
-                  : `Need ${r.hits} picks to unlock`
-              }
-            >
-              <span className="payout-hit">{r.hits}</span>
-              <span className="gold payout-mult">
-                {r.possible ? formatMult(r.mult) : '—'}
-              </span>
-            </div>
-          ))}
-        </div>
-        <div className="payout-table-line">
-          {bottom.map((r) => (
-            <div
-              key={r.hits}
-              className={`payout-row${r.mult <= 0 || !r.possible ? ' is-zero' : ''}`}
-              title={
-                r.possible
-                  ? `${r.hits} hit${r.hits === 1 ? '' : 's'} → ${formatMult(r.mult)}`
-                  : `Need ${r.hits} picks to unlock`
-              }
-            >
-              <span className="payout-hit">{r.hits}</span>
-              <span className="gold payout-mult">
-                {r.possible ? formatMult(r.mult) : '—'}
-              </span>
-            </div>
-          ))}
-        </div>
+      <div className="payout-table" role="list">
+        {rows.map((r) => (
+          <div
+            key={r.hits}
+            role="listitem"
+            className={`payout-row${r.mult <= 0 || !r.possible ? ' is-zero' : ''}`}
+            title={
+              r.possible
+                ? `${r.hits} hit${r.hits === 1 ? '' : 's'} → ${formatMult(r.mult)}`
+                : `Need ${r.hits} picks to unlock`
+            }
+          >
+            <span className="payout-hit">{r.hits}</span>
+            <span className="gold payout-mult">
+              {r.possible ? formatMult(r.mult) : '—'}
+            </span>
+          </div>
+        ))}
       </div>
     </aside>
   );

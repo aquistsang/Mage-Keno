@@ -552,7 +552,9 @@ export function MageCanvas({
 
       const wrapEl = wrapRef.current;
       const wrapW = wrapEl?.clientWidth ?? canvas.width;
-      const portrait = wrapW < 860;
+      const rootW = document.getElementById('root')?.clientWidth ?? wrapW;
+      // Prefer the iframe/#root box — device width can lie inside TriBet.
+      const portrait = Math.min(wrapW, rootW) < 860;
       const platform = getCloudPlatform();
 
       let mageW: number;
@@ -561,29 +563,25 @@ export function MageCanvas({
       let mageY: number;
 
       if (portrait) {
-        // Fill the band above the numbers, but land feet on the cloud deck.
+        // Mobile: hero-scale mage — fill width and most of the sky above the board.
         const gridTop = getGridTop();
-        const padTop = Math.max(6, canvas.height * 0.01);
+        const padTop = Math.max(2, canvas.height * 0.002);
+        // Feet overlap the number board so the figure reads large vs the coins.
         const footTarget = platform
-          ? Math.min(platform.deckY, gridTop - 8)
-          : Math.max(padTop + 80, gridTop - 2);
-        const bandH = Math.max(80, footTarget - padTop);
-        // Slightly smaller than full-band so the cloud pedestal reads underfoot
-        const scale = srcH > 0 ? (bandH / srcH) * (platform ? 1.05 : 1.212) : 1;
+          ? Math.min(platform.deckY, gridTop + canvas.height * 0.1)
+          : gridTop + canvas.height * 0.14;
+        const bandH = Math.max(180, footTarget - padTop);
+        const widthScale = srcW > 0 ? (canvas.width * 1.08) / srcW : 1;
+        const heightScale = srcH > 0 ? (bandH / srcH) * 1.55 : 1;
+        const scale = Math.max(widthScale, heightScale) * 1.12;
         mageW = srcW > 0 ? srcW * scale : canvas.width;
         mageH = srcH > 0 ? srcH * scale : bandH;
         mageX = platform
           ? platform.centerX - mageW / 2
           : (canvas.width - mageW) / 2;
         mageY = footTarget - mageH;
-        // Keep hat mostly in frame if the cloud sits low
+        // Allow slight hat crop so body/staff stay huge in frame
         if (mageY < padTop - mageH * 0.18) mageY = padTop - mageH * 0.18;
-        // Nudge down toward the number board (mobile only)
-        {
-          const cssH = wrapEl?.clientHeight || canvas.height;
-          const cmY = (96 / 2.54) * (canvas.height / Math.max(1, cssH));
-          mageY += cmY; // 1cm down
-        }
       } else {
         // Desktop: mage in the left column, clear of the number board
         const colW = canvas.width * 0.44;

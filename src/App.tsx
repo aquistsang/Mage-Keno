@@ -46,11 +46,21 @@ export default function App() {
         <section className="arena">
           <div
             className={`arena-frame${impactPlaying ? ' has-storm' : ''}`}
-            style={{
-              ['--arena-bg-mobile' as string]: "url('./assets/mage-bg.png')",
-              ['--arena-bg-desktop' as string]: "url('./assets/mage-bg-desktop.png')",
-            }}
           >
+            <img
+              className="arena-sky arena-sky-mobile"
+              src="./assets/mage-bg.png"
+              alt=""
+              draggable={false}
+              aria-hidden="true"
+            />
+            <img
+              className="arena-sky arena-sky-desktop"
+              src="./assets/mage-bg-desktop.png"
+              alt=""
+              draggable={false}
+              aria-hidden="true"
+            />
             <StaffImpact active={impactPlaying} />
             <MageCanvas
               gridRef={gridRef}
