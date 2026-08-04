@@ -1170,7 +1170,7 @@ body {
 
   .keno-ball {
     /* Slightly larger discs; grid centers stay put */
-    width: 110%;
+    width: 105%;
     height: auto;
     max-width: none;
     max-height: none;

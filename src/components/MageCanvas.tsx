@@ -571,10 +571,10 @@ export function MageCanvas({
           ? Math.min(platform.deckY, gridTop - gap)
           : Math.max(padTop + 80, gridTop - gap);
         const bandH = Math.max(80, footTarget - padTop);
-        // Fit the sky band, then +15% for mobile presence.
+        // Fit the sky band, then +10% for mobile presence.
         const scaleBySky = srcH > 0 ? (bandH / srcH) * (platform ? 1.15 : 1.30) : 1;
         const scaleByWidth = srcW > 0 ? (canvas.width * 0.98) / srcW : 1;
-        const scale = Math.min(scaleBySky, scaleByWidth) * 1.15;
+        const scale = Math.min(scaleBySky, scaleByWidth) * 1.1;
         mageW = srcW > 0 ? srcW * scale : canvas.width;
         mageH = srcH > 0 ? srcH * scale : bandH;
         mageX = platform
@@ -585,7 +585,7 @@ export function MageCanvas({
         const oneCm = (96 / 2.54) * (canvas.height / Math.max(1, cssH));
         mageY = footTarget - mageH + oneCm;
         if (mageY + mageH > footTarget) mageY = footTarget - mageH;
-        // Allow a little hat crop rather than shrinking the 15% boost away.
+        // Allow a little hat crop rather than shrinking the 10% boost away.
         if (mageY < padTop - mageH * 0.06) mageY = padTop - mageH * 0.06;
       } else {
         // Desktop: mage in the left column, clear of the number board
