@@ -29,14 +29,6 @@ export function FairnessFooter({ spots, fairness, shortHash }: Props) {
           <span>
             RTP <strong className="gold">{pct(rtp)}</strong>
           </span>
-          <span className="fairness-sep">·</span>
-          <span>
-            Edge <strong>{pct(edge)}</strong>
-          </span>
-          <span className="fairness-sep">·</span>
-          <span className="fairness-seed" title={fairness.serverSeedHash}>
-            Seed <strong className="fairness-mono">{shortHash(fairness.serverSeedHash)}</strong>
-          </span>
         </div>
         <button type="button" className="fairness-open-btn" onClick={() => setOpen(true)}>
           Fairness

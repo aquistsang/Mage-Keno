@@ -566,15 +566,14 @@ export function MageCanvas({
         // Mobile: mage in the sky band only — feet ABOVE the numbers, no overlap.
         const gridTop = getGridTop();
         const padTop = Math.max(6, canvas.height * 0.01);
-        const gap = Math.max(20, canvas.height * 0.028);
+        const gap = Math.max(12, canvas.height * 0.016);
         const footTarget = platform
           ? Math.min(platform.deckY, gridTop - gap)
           : Math.max(padTop + 80, gridTop - gap);
         const bandH = Math.max(80, footTarget - padTop);
-        // Fit the band; sprite has transparent padding so a mild overshoot is OK
-        // but never push feet past the board.
-        const scaleBySky = srcH > 0 ? (bandH / srcH) * (platform ? 1.05 : 1.18) : 1;
-        const scaleByWidth = srcW > 0 ? (canvas.width * 0.92) / srcW : 1;
+        // Fit the band (~10% larger figure); hat may crop slightly, feet stay clear.
+        const scaleBySky = srcH > 0 ? (bandH / srcH) * (platform ? 1.15 : 1.30) : 1;
+        const scaleByWidth = srcW > 0 ? (canvas.width * 0.98) / srcW : 1;
         const scale = Math.min(scaleBySky, scaleByWidth);
         mageW = srcW > 0 ? srcW * scale : canvas.width;
         mageH = srcH > 0 ? srcH * scale : bandH;
@@ -582,18 +581,9 @@ export function MageCanvas({
           ? platform.centerX - mageW / 2
           : (canvas.width - mageW) / 2;
         mageY = footTarget - mageH;
-        if (mageY < padTop) mageY = padTop;
-        // If hat forced us up, shrink so feet still clear the board.
-        if (mageY + mageH > footTarget && srcH > 0) {
-          const maxH = footTarget - mageY;
-          const s2 = maxH / srcH;
-          mageW = srcW * s2;
-          mageH = srcH * s2;
-          mageX = platform
-            ? platform.centerX - mageW / 2
-            : (canvas.width - mageW) / 2;
-          mageY = footTarget - mageH;
-        }
+        // Prefer keeping feet above the board; allow slight hat crop.
+        if (mageY < padTop - mageH * 0.1) mageY = padTop - mageH * 0.1;
+        if (mageY + mageH > footTarget) mageY = footTarget - mageH;
       } else {
         // Desktop: mage in the left column, clear of the number board
         const colW = canvas.width * 0.44;
