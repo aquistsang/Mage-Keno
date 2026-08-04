@@ -580,10 +580,22 @@ export function MageCanvas({
         mageX = platform
           ? platform.centerX - mageW / 2
           : (canvas.width - mageW) / 2;
-        mageY = footTarget - mageH;
-        // Prefer keeping feet above the board; allow slight hat crop.
-        if (mageY < padTop - mageH * 0.1) mageY = padTop - mageH * 0.1;
-        if (mageY + mageH > footTarget) mageY = footTarget - mageH;
+        // Nudge down 1cm so the hat stays on-screen (user POV).
+        const cssH = wrapEl?.clientHeight || canvas.height;
+        const oneCm = (96 / 2.54) * (canvas.height / Math.max(1, cssH));
+        mageY = footTarget - mageH + oneCm;
+        if (mageY + mageH > footTarget && srcH > 0) {
+          // Shrink slightly so feet stay clear of the board after the nudge.
+          const maxH = Math.max(40, footTarget - padTop);
+          const s2 = Math.min(scale, maxH / srcH);
+          mageW = srcW * s2;
+          mageH = srcH * s2;
+          mageX = platform
+            ? platform.centerX - mageW / 2
+            : (canvas.width - mageW) / 2;
+          mageY = footTarget - mageH;
+        }
+        if (mageY < padTop) mageY = padTop;
       } else {
         // Desktop: mage in the left column, clear of the number board
         const colW = canvas.width * 0.44;
