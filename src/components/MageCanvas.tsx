@@ -571,31 +571,22 @@ export function MageCanvas({
           ? Math.min(platform.deckY, gridTop - gap)
           : Math.max(padTop + 80, gridTop - gap);
         const bandH = Math.max(80, footTarget - padTop);
-        // Fit the band (~10% larger figure); hat may crop slightly, feet stay clear.
+        // Fit the sky band, then +15% for mobile presence.
         const scaleBySky = srcH > 0 ? (bandH / srcH) * (platform ? 1.15 : 1.30) : 1;
         const scaleByWidth = srcW > 0 ? (canvas.width * 0.98) / srcW : 1;
-        const scale = Math.min(scaleBySky, scaleByWidth);
+        const scale = Math.min(scaleBySky, scaleByWidth) * 1.15;
         mageW = srcW > 0 ? srcW * scale : canvas.width;
         mageH = srcH > 0 ? srcH * scale : bandH;
         mageX = platform
           ? platform.centerX - mageW / 2
           : (canvas.width - mageW) / 2;
-        // Nudge down 1cm so the hat stays on-screen (user POV).
+        // Nudge down ~1cm so the hat reads on-screen; feet stay above the board.
         const cssH = wrapEl?.clientHeight || canvas.height;
         const oneCm = (96 / 2.54) * (canvas.height / Math.max(1, cssH));
         mageY = footTarget - mageH + oneCm;
-        if (mageY + mageH > footTarget && srcH > 0) {
-          // Shrink slightly so feet stay clear of the board after the nudge.
-          const maxH = Math.max(40, footTarget - padTop);
-          const s2 = Math.min(scale, maxH / srcH);
-          mageW = srcW * s2;
-          mageH = srcH * s2;
-          mageX = platform
-            ? platform.centerX - mageW / 2
-            : (canvas.width - mageW) / 2;
-          mageY = footTarget - mageH;
-        }
-        if (mageY < padTop) mageY = padTop;
+        if (mageY + mageH > footTarget) mageY = footTarget - mageH;
+        // Allow a little hat crop rather than shrinking the 15% boost away.
+        if (mageY < padTop - mageH * 0.06) mageY = padTop - mageH * 0.06;
       } else {
         // Desktop: mage in the left column, clear of the number board
         const colW = canvas.width * 0.44;

@@ -1144,6 +1144,7 @@ body {
     padding: 0 4px 4px;
     justify-content: center;
     align-items: flex-end;
+    overflow: visible;
   }
 
   .keno-grid-slot {
@@ -1162,15 +1163,17 @@ body {
     max-width: 100%;
     max-height: none;
     margin: 0 auto;
-    gap: 4px;
+    gap: 2px;
     min-height: 0;
+    overflow: visible;
   }
 
   .keno-ball {
-    width: 100%;
-    height: 100%;
-    max-width: 100%;
-    max-height: 100%;
+    /* Slightly larger discs; grid centers stay put */
+    width: 110%;
+    height: auto;
+    max-width: none;
+    max-height: none;
     aspect-ratio: 1;
     align-self: center;
     justify-self: center;
@@ -1179,7 +1182,7 @@ body {
   }
 
   .keno-ball-face {
-    font-size: clamp(18px, 6cqw, 28px);
+    font-size: clamp(19px, 6.4cqw, 30px);
   }
 
   /* Compact stats row — free vertical space for payouts + board */
